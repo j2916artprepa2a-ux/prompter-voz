@@ -206,6 +206,16 @@ body.pip{background:#000}
   </div>
 </div>
 
+<div class="sheet" id="vidSheet">
+  <div class="card">
+    <h2>Tu video</h2>
+    <video id="vidPrev" controls playsinline style="width:100%;max-height:52vh;border-radius:14px;background:#000"></video>
+    <button class="pill primary" id="vidSave">Guardar en el celular (Galería / Fotos)</button>
+    <button class="pill" id="vidShare">Compartir o subir a Google Fotos</button>
+    <p class="hint">En Android se guarda en la carpeta “Download”; ahí lo ves en Galería y en Google Fotos (Biblioteca → Fotos del dispositivo → Download). Para subirlo a tu nube, usa “Compartir” y elige Google Fotos.</p>
+    <div class="actions"><button class="pill" id="vidClose">Cerrar</button></div>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -641,15 +651,28 @@ async function saveRec(){
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
   const blob = new Blob(chunks, { type });
   const name = 'prompter-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.' + ext;
-  const file = new File([blob], name, { type });
-  if (navigator.canShare && navigator.canShare({ files:[file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)){
-    try { await navigator.share({ files:[file], title:name }); return; } catch(e){}
-  }
+  lastVideo = new File([blob], name, { type });
+  $('vidPrev').src = URL.createObjectURL(blob);
+  const canShare = navigator.canShare && navigator.canShare({ files:[lastVideo] });
+  $('vidShare').classList.toggle('hide', !canShare);
+  open('vidSheet');
+}
+let lastVideo = null;
+function downloadVideo(){
+  if (!lastVideo) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name;
+  a.href = URL.createObjectURL(lastVideo); a.download = lastVideo.name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-  toast('Video guardado en Descargas');
+  toast(IS_ANDROID ? 'Guardado. Lo ves en Galería / Google Fotos → carpeta “Download”.' : 'Video guardado en Descargas');
+}
+async function shareVideo(){
+  if (!lastVideo) return;
+  try { await navigator.share({ files:[lastVideo], title: lastVideo.name }); } catch(e){}
+}
+function closeVideo(){
+  close('vidSheet');
+  const v = $('vidPrev'); if (v.src){ URL.revokeObjectURL(v.src); v.removeAttribute('src'); v.load(); }
 }
 
 /* ================= ventana flotante (Windows / escritorio) ================= */
@@ -716,6 +739,9 @@ function close(id){ $(id).classList.remove('open'); }
 $('editBtn').onclick = () => { $('scriptInput').value = S.script; open('editSheet'); setTimeout(()=>$('scriptInput').focus(),50); };
 $('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); };
 $('clearBtn').onclick = () => { $('scriptInput').value = ''; $('scriptInput').focus(); };
+$('vidSave').onclick = downloadVideo;
+$('vidShare').onclick = shareVideo;
+$('vidClose').onclick = closeVideo;
 $('setBtn').onclick = () => { fillMics(); open('setSheet'); };
 $('setDone').onclick = () => close('setSheet');
 document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => { if (e.target === s) s.classList.remove('open'); }));
