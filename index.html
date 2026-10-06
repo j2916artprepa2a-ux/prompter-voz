@@ -358,7 +358,7 @@ function follow(transcript){
   const dist = best - pos;
   // reglas de confianza
   const near = dist >= -1 && dist <= 3;
-  const ok = (near && bestScore >= 1.0) || (bestScore >= 2.4) || (dist < -1 && bestScore >= 3.4);
+  const ok = (near && bestScore >= 1.25) || (bestScore >= 2.4) || (dist < -1 && bestScore >= 3.4);
   if (!ok) return false;
   let np = best + 1;
   if (np !== pos){ pos = Math.min(np, W.length); manualOffset = 0; paint(); }
