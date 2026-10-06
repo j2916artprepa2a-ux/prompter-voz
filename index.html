@@ -90,8 +90,15 @@ body.no-camera #nocam{display:flex}
 .b.big{width:68px;height:68px}
 #recBtn{background:transparent;box-shadow:inset 0 0 0 4px #fff}
 #recBtn i{width:52px;height:52px;border-radius:50%;background:var(--rec);transition:all .2s}
-#recBtn.on i{width:26px;height:26px;border-radius:7px}
-#recTime{position:fixed;top:calc(var(--top) + 8px);right:14px;z-index:7;background:var(--rec);color:#fff;
+#recBtn i{position:relative}
+body.recording:not(.paused) #recBtn i::before,body.recording:not(.paused) #recBtn i::after{content:"";position:absolute;top:15px;width:7px;height:22px;background:#fff;border-radius:2px}
+body.recording:not(.paused) #recBtn i::before{left:16px}
+body.recording:not(.paused) #recBtn i::after{right:16px}
+#doneBtn{display:none;background:#fff;color:#000}
+body.recording #doneBtn{display:grid}
+body.recording #editBtn,body.recording #setBtn,body.recording #pipBtn{display:none}
+body.paused #recTime{background:#3a3a3e}
+#recTime{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:7;background:var(--rec);color:#fff;
   font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;display:none;font-variant-numeric:tabular-nums}
 body.recording #recTime{display:block}
 .hide{display:none!important}
@@ -157,7 +164,9 @@ body.pip{background:#000}
     <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
   <button class="b big" id="micBtn" title="Seguir mi voz" aria-label="Seguir mi voz">
     <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
-  <button class="b big" id="recBtn" title="Grabar video" aria-label="Grabar video"><i></i></button>
+  <button class="b big" id="recBtn" title="Grabar / pausar" aria-label="Grabar o pausar"><i></i></button>
+  <button class="b" id="doneBtn" title="Terminar y guardar" aria-label="Terminar y guardar">
+    <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
   <button class="b" id="pipBtn" title="Ventana flotante" aria-label="Ventana flotante">
     <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="8" height="6" rx="1"/></svg></button>
   <button class="b" id="setBtn" title="Ajustes" aria-label="Ajustes">
@@ -208,7 +217,7 @@ body.pip{background:#000}
 
 <div class="sheet" id="vidSheet">
   <div class="card">
-    <h2>Tu video</h2>
+    <h2>✓ Video guardado</h2>
     <video id="vidPrev" controls playsinline style="width:100%;max-height:52vh;border-radius:14px;background:#000"></video>
     <button class="pill primary" id="vidSave">Guardar en el celular (Galería / Fotos)</button>
     <button class="pill" id="vidShare">Compartir o subir a Google Fotos</button>
@@ -409,7 +418,7 @@ async function getMic(){
   return micStream;
 }
 function releaseMicIfIdle(){
-  const recBusy = recorder && recorder.state === 'recording';
+  const recBusy = recorder && recorder.state !== 'inactive';
   if (!vRec && !recBusy && micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 }
 async function fillMics(){
@@ -608,14 +617,15 @@ function stopCam(){
   document.body.classList.add('no-camera');
 }
 
-let recorder = null, chunks = [], recStart = 0, recTimer = 0, micStream = null;
+let recorder = null, chunks = [], recStart = 0, recTimer = 0, micStream = null, recAcc = 0, resumeVoice = false;
 function pickMime(){
   const c = ['video/mp4;codecs=avc1,mp4a','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
   for (const m of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
   return '';
 }
 async function toggleRec(){
-  if (recorder && recorder.state === 'recording'){ recorder.stop(); return; }
+  if (recorder && recorder.state === 'recording'){ pauseRec(); return; }
+  if (recorder && recorder.state === 'paused'){ resumeRec(); return; }
   if (!window.MediaRecorder){ toast('Tu navegador no puede grabar video aquí.'); return; }
   if (!S.camOn){ S.camOn = true; store.set('camOn', true); $('camOn').checked = true; }
   await startCam();
@@ -630,22 +640,43 @@ async function toggleRec(){
   try { mic = await getMic(); } catch(e){ toast('Grabando sin audio (no hubo permiso de micrófono).'); }
   const tracks = [...camStream.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
   const mime = pickMime();
-  recorder = new MediaRecorder(new MediaStream(tracks), mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
+  recorder = new MediaRecorder(new MediaStream(tracks), mime ? { mimeType: mime, videoBitsPerSecond: 3.5e6, audioBitsPerSecond: 128000 } : undefined);
   chunks = [];
   recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
   recorder.onstop = saveRec;
   recorder.start(1000);
-  recStart = Date.now();
-  document.body.classList.add('recording'); $('recBtn').classList.add('on');
-  recTimer = setInterval(() => {
-    const s = Math.floor((Date.now()-recStart)/1000);
-    $('recTime').textContent = '● ' + String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
-  }, 250);
+  recStart = Date.now(); recAcc = 0;
+  document.body.classList.add('recording'); document.body.classList.remove('paused'); $('recBtn').classList.add('on');
+  recTimer = setInterval(drawRecTime, 250); drawRecTime();
   if (!listening) startListening();
+}
+function recElapsed(){ return recAcc + (recorder && recorder.state === 'recording' ? Date.now() - recStart : 0); }
+function drawRecTime(){
+  const s = Math.floor(recElapsed() / 1000);
+  const t = String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+  $('recTime').textContent = (recorder && recorder.state === 'paused' ? '❚❚ ' : '● ') + t;
+}
+// Pausa estilo TikTok: el video sigue siendo uno solo, el texto se queda donde ibas
+function pauseRec(){
+  if (!recorder || recorder.state !== 'recording') return;
+  recorder.pause(); recAcc += Date.now() - recStart;
+  document.body.classList.add('paused');
+  resumeVoice = listening; if (listening) stopListening();
+  setStatus('Pausado'); drawRecTime();
+}
+function resumeRec(){
+  if (!recorder || recorder.state !== 'paused') return;
+  recorder.resume(); recStart = Date.now();
+  document.body.classList.remove('paused');
+  if (resumeVoice && !listening) startListening();
+  drawRecTime();
+}
+function finishRec(){
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
 }
 async function saveRec(){
   clearInterval(recTimer);
-  document.body.classList.remove('recording'); $('recBtn').classList.remove('on');
+  document.body.classList.remove('recording', 'paused'); $('recBtn').classList.remove('on');
   releaseMicIfIdle();
   const type = (recorder.mimeType || 'video/webm').split(';')[0];
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
@@ -655,6 +686,8 @@ async function saveRec(){
   $('vidPrev').src = URL.createObjectURL(blob);
   const canShare = navigator.canShare && navigator.canShare({ files:[lastVideo] });
   $('vidShare').classList.toggle('hide', !canShare);
+  downloadVideo();               // se guarda solo, sin pasos extra
+  $('vidSave').textContent = 'Guardar otra copia';
   open('vidSheet');
 }
 let lastVideo = null;
@@ -731,6 +764,7 @@ $('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
 $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
 $('resetBtn').onclick = () => { pos = 0; manualOffset = 0; vHeard = ''; paint(true); if (listening && S.engine !== 'local') newRec(); };
 $('recBtn').onclick = toggleRec;
+$('doneBtn').onclick = finishRec;
 $('pipBtn').onclick = togglePip;
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 
