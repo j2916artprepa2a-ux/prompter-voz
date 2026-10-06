@@ -124,7 +124,7 @@ body.recording #recTime{display:block}
 .row select{background:#222;color:var(--ink);border:1px solid #333;border-radius:10px;padding:8px 10px;font:inherit}
 textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1px solid #2a2a2e;border-radius:14px;padding:14px;
   font:500 17px/1.5 system-ui,sans-serif;resize:vertical}
-.actions{display:flex;gap:10px;justify-content:flex-end}
+.actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .pill{border:0;border-radius:999px;padding:12px 20px;background:#26262a;cursor:pointer;font-weight:600}
 .pill.primary{background:var(--accent);color:var(--accent-ink)}
 .switch{appearance:none;width:46px;height:28px;border-radius:999px;background:#333;position:relative;cursor:pointer;transition:background .2s}
@@ -189,6 +189,7 @@ body.pip{background:#000}
     <textarea id="scriptInput" spellcheck="true" placeholder="Pega o escribe aquí lo que vas a decir…"></textarea>
     <div class="actions">
       <button class="pill" id="exBtn">Ejemplo con pausas</button>
+      <button class="pill" id="salesBtn">Plantilla de venta (StoryBrand)</button>
       <button class="pill" id="clearBtn">Borrar</button>
       <button class="pill primary" id="saveBtn">Listo</button>
     </div>
@@ -247,6 +248,25 @@ body.pip{background:#000}
 'use strict';
 
 /* ================= estado ================= */
+const SALES_SCRIPT =
+`[1. EL CLIENTE Y LO QUE QUIERE · mira a la cámara, tono cercano]
+¿Te ha pasado que quieres algo increíble, pero nunca es el momento de comprarlo?
+[PAUSA]
+[2. EL PROBLEMA · cara de "te entiendo"]
+Ahorras, lo piensas, y al final el dinero se va en otras cosas. Y sientes que esos premios son solo para los que tienen suerte.
+[PAUSA]
+[3. TÚ ERES EL GUÍA · sonríe y señálate]
+A mí me pasaba igual. Por eso creé Rifas Ases: rifas digitales, claras y transparentes, donde con poquito puedes ganar en grande.
+[PAUSA]
+[4. EL PLAN · muestra tu celular]
+Es súper fácil. Uno: entras al link de mi perfil. Dos: escoges tus números. Tres: ves el sorteo en vivo.
+[PAUSA]
+[5. LLAMADA A LA ACCIÓN · acércate a la cámara · cambia PREMIO y PRECIO]
+Esta semana rifamos PREMIO por solo PRECIO el boleto. Los números se están acabando, no te quedes con las ganas.
+[PAUSA]
+[6. EL FINAL FELIZ · sonríe y señala hacia abajo]
+Imagínate recibiendo tu PREMIO esta semana. Entra al link, aparta tus números y nos vemos en el sorteo.`;
+
 const DEFAULT_SCRIPT =
 `[Mira a la cámara y sonríe]
 ¿Sabías que puedes grabar tus videos sin aprenderte el guion? Hoy te enseño cómo.
@@ -392,8 +412,10 @@ function scrollTo(spanIdx, instant){
   let y = target.offsetTop;
   if (keep){
     // sube a la línea anterior real (respeta saltos de párrafo)
-    const i0 = spans.indexOf(target);
-    for (let i = i0 - 1; i >= 0; i--){ if (spans[i].offsetTop < target.offsetTop - 2){ y = spans[i].offsetTop; break; } }
+    // línea anterior real (palabras, indicaciones o marca de pausa)
+    for (let el = target.previousElementSibling; el; el = el.previousElementSibling){
+      if (el.offsetHeight > 0 && el.offsetTop < target.offsetTop - 2){ y = el.offsetTop; break; }
+    }
   }
   y = Math.max(0, y);
   y += manualOffset;
@@ -852,6 +874,7 @@ function open(id){ $(id).classList.add('open'); }
 function close(id){ $(id).classList.remove('open'); }
 $('editBtn').onclick = () => { $('scriptInput').value = S.script; open('editSheet'); setTimeout(()=>$('scriptInput').focus(),50); };
 $('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); };
+$('salesBtn').onclick = () => { $('scriptInput').value = SALES_SCRIPT; };
 $('exBtn').onclick = () => { $('scriptInput').value = DEFAULT_SCRIPT; };
 $('cueGo').onclick = cueGo;
 $('cueRedo').onclick = cueRedo;
