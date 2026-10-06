@@ -39,29 +39,45 @@ body.no-camera #cam{display:none}
 body.no-camera #nocam{display:flex}
 
 /* ---------- prompter (debajo de la cámara) ---------- */
-#prompter{position:fixed;left:50%;top:calc(var(--top) + 6px);transform:translateX(-50%);
-  width:min(94vw,820px);background:var(--panel);border-radius:14px 14px 26px 26px;
-  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-  padding:10px 20px 12px;box-shadow:0 10px 40px rgba(0,0,0,.45);z-index:5;
-  touch-action:none}
-#prompter .dot{position:absolute;top:6px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;
-  background:#222;box-shadow:inset 0 0 0 2px #333}
-#prompter.listening .dot{background:var(--accent);box-shadow:0 0 12px var(--accent)}
-#viewport{height:calc(var(--fs) * var(--line) * var(--lines));overflow:hidden;position:relative;margin-top:8px;
-  -webkit-mask-image:linear-gradient(#000 0,#000 70%,transparent 100%);mask-image:linear-gradient(#000 0,#000 70%,transparent 100%)}
-#text{font-size:var(--fs);line-height:var(--line);font-weight:600;letter-spacing:-.01em;
+#prompter{position:fixed;left:50%;top:0;transform:translateX(-50%);
+  width:min(92vw,440px);background:#000;border-radius:0 0 22px 22px;
+  padding:calc(var(--top) + 10px) 18px 7px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:5;
+  touch-action:none;transition:width .25s}
+#viewport{height:calc(var(--fs) * var(--line) * var(--lines));overflow:hidden;position:relative;
+  -webkit-mask-image:linear-gradient(#000 0,#000 78%,rgba(0,0,0,.35) 100%);mask-image:linear-gradient(#000 0,#000 78%,rgba(0,0,0,.35) 100%)}
+#text{font-size:var(--fs);line-height:var(--line);font-weight:500;letter-spacing:0;
   transition:transform .35s cubic-bezier(.2,.7,.2,1);will-change:transform;text-wrap:pretty}
-#text .w{color:var(--ink-dim);border-radius:6px;padding:0 1px;transition:color .15s,background .15s;cursor:pointer}
-#text .w.read{color:var(--ink-read)}
-#text .w.next{color:var(--ink)}
-#text .w.cur{color:var(--accent-ink);background:var(--accent)}
-#text .br{display:block;height:.35em}
-#prompter.mirror-text #text{transform-origin:center}
+#text .w{color:rgba(255,255,255,.93);transition:color .2s;cursor:pointer}
+#text .w.read{color:rgba(255,255,255,.3)}
+#text .w.cur{color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.22em;text-decoration-color:rgba(255,255,255,.85)}
+#text .br{display:block;height:0}
 #prompter.mirror-text #viewport{transform:scaleX(-1)}
-#status{position:absolute;right:14px;bottom:4px;font-size:11px;color:var(--ink-dim);font-weight:500;
-  max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#progress{position:absolute;left:20px;right:20px;bottom:0;height:2px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
-#progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+#pfoot{display:flex;align-items:center;gap:8px;margin-top:5px;height:20px}
+#progress{flex:1;height:4px;position:relative;overflow:hidden;
+  background-image:radial-gradient(circle,rgba(255,255,255,.25) 1.1px,transparent 1.5px);background-size:6px 4px}
+#progress i{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .3s;
+  background-image:radial-gradient(circle,#fff 1.2px,transparent 1.6px);background-size:6px 4px}
+#status{font-size:10px;color:rgba(255,255,255,.45);max-width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{width:22px;height:22px;border:0;background:none;padding:0;display:grid;place-items:center;color:rgba(255,255,255,.5);cursor:pointer}
+.mini svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#prompter.listening #miniMic{color:#ffd34d;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+#prompter.min{width:120px}
+@media (max-width:600px){
+  #prompter{width:min(74vw,300px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
+  #pfoot{height:16px;margin-top:3px;gap:6px}
+  #status{display:none}
+  .mini{width:18px;height:18px}.mini svg{width:11px;height:11px}
+}
+#perm{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;background:#000}
+#perm.show{display:flex}
+#perm .pc{max-width:340px;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+#perm h1{font-size:22px;margin:0}
+#perm p{margin:0;color:rgba(255,255,255,.6);font-size:15px;line-height:1.45}
+#perm .ico{width:64px;height:64px;border-radius:20px;background:#1a1a1d;display:grid;place-items:center}
+#perm .ico svg{width:30px;height:30px;fill:none;stroke:#ffd34d;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#perm .skip{background:none;border:0;color:rgba(255,255,255,.5);font-size:14px;cursor:pointer;padding:6px}
+#prompter.min #viewport,#prompter.min #status{display:none}
 
 /* ---------- controles ---------- */
 #bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;justify-content:center;align-items:center;gap:12px;
@@ -107,19 +123,29 @@ textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1
 #toast.show{opacity:1}
 
 /* ventana flotante (Picture-in-Picture) */
-body.pip #prompter{position:static;transform:none;width:100%;border-radius:0;box-shadow:none;height:100vh}
+body.pip #prompter{position:static;transform:none;width:100%;border-radius:0;box-shadow:none;height:100vh;padding:10px 18px 7px}
 body.pip{background:#000}
 </style>
 </head>
 <body>
 <video id="cam" class="mirror" autoplay playsinline muted></video>
+<div id="perm"><div class="pc">
+  <div class="ico"><svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+  <h1>Activa tu cámara y micrófono</h1>
+  <p id="permMsg">Los necesito para mostrarte en cámara y para seguir tu voz palabra por palabra.</p>
+  <button class="pill primary" id="permBtn">Permitir cámara y micrófono</button>
+  <button class="skip" id="permSkip">Usar solo texto</button>
+</div></div>
 <div id="nocam">Cámara apagada.<br>Modo solo texto: usa “Flotante” para ponerlo encima de tu app de videollamada o grabación.</div>
 
 <div id="prompter">
-  <span class="dot"></span>
   <div id="viewport"><div id="text"></div></div>
-  <div id="status">Toca el micrófono para empezar</div>
-  <div id="progress"><i></i></div>
+  <div id="pfoot">
+    <div id="progress"><i></i></div>
+    <span id="status">Toca el micrófono</span>
+    <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
+    <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
 </div>
 
 <div id="recTime">● 00:00</div>
@@ -154,7 +180,7 @@ body.pip{background:#000}
 <div class="sheet" id="setSheet">
   <div class="card">
     <h2>Ajustes</h2>
-    <div class="row"><label for="fs">Tamaño de letra</label><input type="range" id="fs" min="18" max="64" step="1"></div>
+    <div class="row"><label for="fs">Tamaño de letra</label><input type="range" id="fs" min="13" max="48" step="1"></div>
     <div class="row"><label for="lines">Líneas visibles</label><input type="range" id="lines" min="1" max="6" step="1"></div>
     <div class="row"><label for="lang">Idioma de tu voz</label>
       <select id="lang">
@@ -187,13 +213,13 @@ El texto se queda justo debajo de la cámara, así parece que estoy viendo a la 
 Si me salto una parte, el texto me alcanza solito. ¡Vamos a empezar!`;
 
 const store = {
-  get(k, d){ try{ const v = localStorage.getItem('pv_'+k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
-  set(k, v){ try{ localStorage.setItem('pv_'+k, JSON.stringify(v)); }catch(e){} }
+  get(k, d){ try{ const v = localStorage.getItem('pv2_'+k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('pv2_'+k, JSON.stringify(v)); }catch(e){} }
 };
 
 const S = {
   script: store.get('script', DEFAULT_SCRIPT),
-  fs: store.get('fs', window.innerWidth < 600 ? 26 : 34),
+  fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
   lines: store.get('lines', 3),
   lang: store.get('lang', 'es-MX'),
   camOn: store.get('camOn', true),
@@ -262,7 +288,13 @@ function scrollTo(spanIdx, instant){
   const lh = parseFloat(getComputedStyle(textEl).fontSize) * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line'));
   // la línea actual queda en la 1a línea si sólo hay 1-2 líneas, si no en la 2a (muestra contexto anterior)
   const keep = S.lines >= 3 ? 1 : 0;
-  let y = Math.max(0, target.offsetTop - keep * lh);
+  let y = target.offsetTop;
+  if (keep){
+    // sube a la línea anterior real (respeta saltos de párrafo)
+    const i0 = spans.indexOf(target);
+    for (let i = i0 - 1; i >= 0; i--){ if (spans[i].offsetTop < target.offsetTop - 2){ y = spans[i].offsetTop; break; } }
+  }
+  y = Math.max(0, y);
   y += manualOffset;
   if (instant){ textEl.style.transition='none'; requestAnimationFrame(()=>{ textEl.style.transition=''; }); }
   textEl.style.transform = `translateY(${-y}px)`;
@@ -333,7 +365,7 @@ function startListening(){
   if (!SR){ toast('Tu navegador no tiene reconocimiento de voz. Usa Chrome o Edge.'); return; }
   listening = true; finalBuf = '';
   prompter.classList.add('listening'); $('micBtn').classList.add('on');
-  setStatus('Escuchando…');
+  setStatus('');
   paint();
   newRec();
 }
@@ -350,7 +382,7 @@ function newRec(){
     }
     const heard = (finalBuf + ' ' + interim).trim();
     follow(heard);
-    setStatus('“' + heard.split(/\s+/).slice(-5).join(' ') + '”');
+    setStatus('');
     if (pos >= W.length){ setStatus('¡Terminaste!'); }
   };
   rec.onerror = e => {
@@ -376,6 +408,27 @@ function stopListening(){
 /* ================= cámara y grabación ================= */
 const video = $('cam');
 let camStream = null;
+async function askPerms(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:1920}, height:{ideal:1080} }, audio:true });
+    st.getAudioTracks().forEach(t => t.stop());           // el micro solo era para el permiso
+    camStream = new MediaStream(st.getVideoTracks());
+    video.srcObject = camStream;
+    S.camOn = true; store.set('camOn', true); $('camOn').checked = true;
+    document.body.classList.remove('no-camera');
+    $('perm').classList.remove('show');
+  }catch(err){
+    $('permMsg').innerHTML = 'No se dio el permiso. Toca el candado 🔒 junto a la dirección → Permisos → activa <b>Cámara</b> y <b>Micrófono</b>, y vuelve a intentar.';
+  }
+}
+async function initPerms(){
+  if (!S.camOn){ document.body.classList.add('no-camera'); return; }
+  let state = 'prompt';
+  try{ state = (await navigator.permissions.query({ name:'camera' })).state; }catch(e){}
+  if (state === 'granted') startCam();
+  else { document.body.classList.add('no-camera'); $('perm').classList.add('show'); }
+}
 async function startCam(){
   if (!S.camOn){ document.body.classList.add('no-camera'); return; }
   document.body.classList.remove('no-camera');
@@ -449,7 +502,7 @@ async function togglePip(){
   if (!('documentPictureInPicture' in window)){
     toast('La ventana flotante funciona en Chrome o Edge de computadora.'); return;
   }
-  const h = Math.round(S.fs * 1.32 * S.lines + 46);
+  const h = Math.round(S.fs * 1.32 * S.lines + 52);
   pipWin = await documentPictureInPicture.requestWindow({ width: Math.min(900, screen.availWidth*0.6|0), height: h });
   const st = document.querySelector('style').cloneNode(true);
   pipWin.document.head.appendChild(st);
@@ -494,6 +547,8 @@ window.addEventListener('pointerup', () => {
 });
 
 $('micBtn').onclick = () => listening ? stopListening() : startListening();
+$('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
+$('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
 $('resetBtn').onclick = () => { pos = 0; manualOffset = 0; finalBuf = ''; paint(true); if (listening) newRec(); };
 $('recBtn').onclick = toggleRec;
 $('pipBtn').onclick = togglePip;
@@ -543,7 +598,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && li
 
 applyLook();
 build();
-startCam();
+$('permBtn').onclick = askPerms;
+$('permSkip').onclick = () => { S.camOn = false; store.set('camOn', false); $('camOn').checked = false; $('perm').classList.remove('show'); document.body.classList.add('no-camera'); };
+initPerms();
 if (!SR) setStatus('Sin reconocimiento de voz: abre en Chrome o Edge');
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
