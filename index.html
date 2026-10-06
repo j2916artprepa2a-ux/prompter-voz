@@ -66,7 +66,7 @@ body.no-camera #nocam{display:flex}
 @media (max-width:600px){
   #prompter{width:min(74vw,300px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
   #pfoot{height:16px;margin-top:3px;gap:6px}
-  #status{display:none}
+  #status{font-size:9px;max-width:38%}
   .mini{width:18px;height:18px}.mini svg{width:11px;height:11px}
 }
 #perm{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;background:#000}
@@ -369,38 +369,57 @@ function startListening(){
   paint();
   newRec();
 }
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+let recGen = 0, lastHeardAt = 0;
+function killRec(){
+  if (!rec) return;
+  const old = rec; rec = null;
+  old.onresult = old.onerror = old.onend = old.onstart = null;   // evita el ciclo de reinicios
+  try { old.abort(); } catch(e){}
+}
 function newRec(){
-  try { rec && rec.abort(); } catch(e){}
-  rec = new SR();
-  rec.lang = S.lang; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
-  rec.onresult = e => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++){
-      const r = e.results[i], t = r[0].transcript;
-      if (r.isFinal){ finalBuf = (finalBuf + ' ' + t).split(/\s+/).slice(-12).join(' '); }
-      else interim += ' ' + t;
-    }
-    const heard = (finalBuf + ' ' + interim).trim();
+  killRec();
+  const gen = ++recGen;
+  const r = new SR();
+  rec = r;
+  r.lang = S.lang;
+  r.continuous = !IS_ANDROID;        // en Android es más estable por frases y reiniciando
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+  r.onstart = () => { if (gen === recGen) setStatus('Escuchando…'); };
+  r.onresult = e => {
+    if (gen !== recGen) return;
+    // todo lo que lleva esta sesión (finales + parciales); el alineador usa solo la cola
+    let heard = '';
+    for (let i = 0; i < e.results.length; i++) heard += ' ' + e.results[i][0].transcript;
+    heard = heard.trim();
+    if (!heard) return;
+    lastHeardAt = Date.now();
     follow(heard);
-    setStatus('');
-    if (pos >= W.length){ setStatus('¡Terminaste!'); }
+    setStatus(pos >= W.length ? '¡Terminaste!' : '🎙 ' + heard.split(/\s+/).slice(-3).join(' '));
   };
-  rec.onerror = e => {
+  r.onerror = e => {
+    if (gen !== recGen) return;
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){
-      toast('Necesito permiso del micrófono para seguir tu voz.'); stopListening();
+      toast('Activa el permiso del micrófono para que el texto siga tu voz.'); stopListening();
     } else if (e.error === 'network'){
-      setStatus('Sin internet: el reconocimiento de voz lo necesita');
+      setStatus('Sin internet para la voz');
     } else if (e.error === 'audio-capture'){
-      setStatus('No encuentro micrófono');
+      setStatus('El micrófono está ocupado');
+    } else if (e.error === 'language-not-supported'){
+      setStatus('Idioma no soportado');
     }
   };
-  rec.onend = () => { if (listening) setTimeout(() => { if (listening) newRec(); }, 150); };
-  try { rec.start(); } catch(e){}
+  r.onend = () => {
+    if (gen !== recGen || !listening) return;
+    setTimeout(() => { if (gen === recGen && listening) newRec(); }, 60);
+  };
+  try { r.start(); } catch(e){ setTimeout(() => { if (gen === recGen && listening) newRec(); }, 300); }
 }
 function stopListening(){
   listening = false;
   prompter.classList.remove('listening'); $('micBtn').classList.remove('on');
-  try { rec && rec.abort(); } catch(e){}
+  recGen++; killRec();
   setStatus('En pausa');
   paint();
 }
@@ -462,6 +481,7 @@ async function toggleRec(){
   try{ micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }); }
   catch(e){ micStream = null; toast('Grabando sin audio (no hubo permiso de micrófono).'); }
   const tracks = [...camStream.getVideoTracks(), ...(micStream ? micStream.getAudioTracks() : [])];
+  if (listening) newRec();   // en Android abrir el micro puede cortar el reconocimiento
   const mime = pickMime();
   recorder = new MediaRecorder(new MediaStream(tracks), mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
   chunks = [];
@@ -549,7 +569,7 @@ window.addEventListener('pointerup', () => {
 $('micBtn').onclick = () => listening ? stopListening() : startListening();
 $('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
 $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
-$('resetBtn').onclick = () => { pos = 0; manualOffset = 0; finalBuf = ''; paint(true); if (listening) newRec(); };
+$('resetBtn').onclick = () => { pos = 0; manualOffset = 0; paint(true); if (listening) newRec(); };
 $('recBtn').onclick = toggleRec;
 $('pipBtn').onclick = togglePip;
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
