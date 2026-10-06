@@ -1,0 +1,37 @@
+name: Descargar modelo de voz en español
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/modelo-voz.yml']
+permissions:
+  contents: write
+jobs:
+  modelo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Descargar y empaquetar modelos Vosk
+        run: |
+          set -e
+          mkdir -p models work
+          cd work
+          # Modelo principal (pequeño, ~40 MB)
+          curl -fL -o es42.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
+          unzip -q es42.zip
+          mv vosk-model-small-es-0.42 model
+          tar czf ../models/es.tar.gz model
+          rm -rf model
+          # Modelo de respaldo (más viejo), por si el principal no carga en el navegador
+          if curl -fL -o es03.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.3.zip; then
+            unzip -q es03.zip && mv vosk-model-small-es-0.3 model && tar czf ../models/es-0.3.tar.gz model
+          fi
+          cd .. && rm -rf work
+          ls -la models
+      - name: Guardar en el repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models
+          git diff --cached --quiet || git commit -m "Agregar modelo de voz en español (Vosk)"
+          git push

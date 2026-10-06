@@ -25,7 +25,9 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 
 ## Funciones
 
-- 🎙️ **Sigue tu voz palabra por palabra**: resalta la palabra que te toca decir y avanza mientras hablas.
+- 🎙️ **Sigue tu voz palabra por palabra**: subraya la palabra que te toca decir y avanza mientras hablas.
+- 🧠 **Voz integrada (sin internet)**: reconoce tu voz dentro del teléfono con [Vosk](https://github.com/ccoreilly/vosk-browser), usando el mismo audio que se graba. Así puedes **grabar y que el texto te siga al mismo tiempo en Android**. Solo reconoce palabras de tu guion, por eso es más preciso.
+- 🎧 **Micrófono externo**: elige en Ajustes el micrófono USB-C, de solapa o inalámbrico.
 - 🔁 **Te alcanza si te saltas algo**: si brincas una frase, se ubica solo. Si repites palabras o hay ruido, no se mueve de más.
 - 📷 **Texto debajo de la cámara**: panel tipo *notch* arriba de la pantalla, pegado al lente frontal.
 - ⏺️ **Graba video con audio** desde la app y lo guarda (en Android lo puedes compartir directo).
@@ -55,9 +57,9 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 
 ## Requisitos y limitaciones
 
-- Necesita **internet** para el reconocimiento de voz.
+- La voz de Google necesita **internet**. La voz integrada descarga ~40 MB la primera vez y luego funciona sin internet.
 - Necesita **HTTPS** para cámara y micrófono (GitHub Pages ya lo da).
-- En algunos Android, grabar video y seguir la voz al mismo tiempo puede chocar por el micrófono.
+- En Android, la voz de Google no puede escuchar mientras se graba; por eso la app usa la voz integrada al grabar.
 - En Android el texto se muestra dentro de la app; no puede ponerse encima de la app de Cámara del sistema.
 
 ## Estructura
@@ -65,7 +67,9 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 ```
 index.html      # toda la app (interfaz + seguimiento de voz + cámara + grabación)
 manifest.json   # datos para instalarla como app
-sw.js           # funciona offline (menos el reconocimiento de voz)
+sw.js           # funciona offline
+lib/vosk.js     # reconocimiento de voz en el navegador (Vosk, Apache 2.0)
+models/         # modelo de voz en español (lo descarga la acción de GitHub)
 icons/          # íconos
 ```
 

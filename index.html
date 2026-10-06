@@ -190,6 +190,14 @@ body.pip{background:#000}
         <option value="en-US">English (US)</option>
         <option value="pt-BR">Português (Brasil)</option>
       </select></div>
+    <div class="row"><label for="engine">Reconocimiento de voz</label>
+      <select id="engine">
+        <option value="local">Integrado (sin internet, funciona grabando)</option>
+        <option value="google">Google (necesita internet)</option>
+      </select></div>
+    <div class="row"><label for="micSel">Micrófono</label>
+      <select id="micSel"><option value="">Predeterminado del equipo</option></select></div>
+    <p class="hint">Para grabar video y que el texto te siga al mismo tiempo en Android, usa “Integrado”: escucha el mismo audio que se graba, también con micrófono externo (USB-C o inalámbrico). La primera vez descarga la voz en español (≈40 MB). El “Idioma de tu voz” solo aplica a Google.</p>
     <div class="row"><label for="camOn">Mostrar cámara</label><input type="checkbox" class="switch" id="camOn"></div>
     <div class="row"><label for="camFlip">Cámara en espejo</label><input type="checkbox" class="switch" id="camFlip"></div>
     <div class="row"><label for="textFlip">Texto en espejo (para cristal de teleprompter)</label><input type="checkbox" class="switch" id="textFlip"></div>
@@ -222,6 +230,8 @@ const S = {
   fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
   lines: store.get('lines', 3),
   lang: store.get('lang', 'es-MX'),
+  engine: store.get('engine', /Android/i.test(navigator.userAgent) ? 'local' : 'google'),
+  micId: store.get('micId', ''),
   camOn: store.get('camOn', true),
   camFlip: store.get('camFlip', true),
   textFlip: store.get('textFlip', false),
@@ -362,12 +372,134 @@ let rec = null, listening = false, finalBuf = '';
 function setStatus(t){ statusEl.textContent = t; }
 
 function startListening(){
-  if (!SR){ toast('Tu navegador no tiene reconocimiento de voz. Usa Chrome o Edge.'); return; }
+  if (S.engine !== 'local' && !SR){ toast('Tu navegador no tiene la voz de Google. Uso la voz integrada.'); S.engine = 'local'; }
   listening = true; finalBuf = '';
   prompter.classList.add('listening'); $('micBtn').classList.add('on');
   setStatus('');
   paint();
-  newRec();
+  if (S.engine === 'local') startLocal();
+  else newRec();
+}
+function onHeard(text){
+  follow(text);
+  setStatus(pos >= W.length ? '¡Terminaste!' : '🎙 ' + text.split(/\s+/).slice(-3).join(' '));
+}
+
+/* ---------- micrófono compartido (grabación + voz integrada) ---------- */
+async function getMic(){
+  if (micStream && micStream.getAudioTracks().some(t => t.readyState === 'live')) return micStream;
+  const c = { echoCancellation:true, noiseSuppression:true, autoGainControl:true };
+  if (S.micId) c.deviceId = { exact: S.micId };
+  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: c }); }
+  catch(e){
+    if (!S.micId) throw e;
+    S.micId = ''; store.set('micId', '');
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } });
+  }
+  return micStream;
+}
+function releaseMicIfIdle(){
+  const recBusy = recorder && recorder.state === 'recording';
+  if (!vRec && !recBusy && micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
+async function fillMics(){
+  try{
+    const ds = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    const sel = $('micSel'); sel.length = 1;
+    ds.forEach((d, i) => {
+      if (d.deviceId === 'default' || d.deviceId === 'communications') return;
+      const o = document.createElement('option'); o.value = d.deviceId;
+      o.textContent = d.label || ('Micrófono ' + (i + 1)); sel.appendChild(o);
+    });
+    sel.value = S.micId; if (sel.value !== S.micId) sel.value = '';
+  }catch(e){}
+}
+
+/* ---------- voz integrada (Vosk, corre en el teléfono) ---------- */
+let voskModel = null, voskLoading = null, vRec = null, aCtx = null, aNode = null, aSrc = null, vHeard = '', localGen = 0;
+function loadScript(src){ return new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = ko; document.head.appendChild(sc); }); }
+function openModel(url){
+  return new Promise((ok, ko) => {
+    const m = new Vosk.Model(url);
+    m.on('load', msg => msg.result ? ok(m) : (m.terminate(), ko(new Error('modelo no cargó'))));
+    m.on('error', msg => { try { m.terminate(); } catch(e){} ko(new Error(msg.error || 'error de modelo')); });
+  });
+}
+function withTimeout(pr, ms){ return Promise.race([pr, new Promise((_, ko) => setTimeout(() => ko(new Error('timeout')), ms))]); }
+async function loadVosk(){
+  if (voskModel) return voskModel;
+  if (!voskLoading){
+    voskLoading = (async () => {
+      setStatus('Preparando voz…');
+      if (!window.Vosk) await loadScript('lib/vosk.js');
+      let last;
+      for (const u of ['models/es.tar.gz', 'models/es-0.3.tar.gz']){
+        const url = new URL(u, location.href).href;
+        try {
+          const head = await fetch(url, { method:'HEAD', cache:'no-store' });
+          if (!head.ok) { last = new Error('no existe ' + u); continue; }
+        } catch(e){ /* sin internet: puede que ya esté guardado */ }
+        try { return await withTimeout(openModel(url), 300000); }
+        catch(e){ last = e; }
+      }
+      throw last || new Error('sin modelo');
+    })();
+    let first = true;
+    try { if (!localStorage.getItem('pv2_voskOk')) toast('Descargando la voz en español (≈40 MB). Solo pasa la primera vez.'); else first = false; } catch(e){}
+  }
+  try { voskModel = await voskLoading; try{ localStorage.setItem('pv2_voskOk','1'); }catch(e){} return voskModel; }
+  finally { voskLoading = null; }
+}
+function grammarJSON(){
+  const set = new Set();
+  for (const w of S.script.split(/\s+/)){
+    const g = w.toLowerCase().replace(/[^a-z0-9áéíóúüñ]/g, '');
+    if (g) set.add(g);
+  }
+  return JSON.stringify([...set, '[unk]']);
+}
+async function startLocal(){
+  const gen = ++localGen;
+  try{
+    const model = await loadVosk();
+    const stream = await getMic();
+    if (gen !== localGen || !listening) return;
+    stopLocal(true);
+    aCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try { await aCtx.resume(); } catch(e){}
+    aSrc = aCtx.createMediaStreamSource(stream);
+    vRec = new model.KaldiRecognizer(aCtx.sampleRate, grammarJSON());
+    vHeard = '';
+    vRec.on('result', m => {
+      const t = m.result && m.result.text; if (!t) return;
+      vHeard = (vHeard + ' ' + t).trim().split(/\s+/).slice(-12).join(' ');
+      onHeard(vHeard);
+    });
+    vRec.on('partialresult', m => {
+      const pt = m.result && m.result.partial; if (!pt) return;
+      onHeard((vHeard + ' ' + pt).trim());
+    });
+    aNode = aCtx.createScriptProcessor(4096, 1, 1);
+    aNode.onaudioprocess = e => { if (vRec) try { vRec.acceptWaveform(e.inputBuffer); } catch(err){} };
+    aSrc.connect(aNode); aNode.connect(aCtx.destination);
+    setStatus('Escuchando…');
+  }catch(err){
+    if (gen !== localGen) return;
+    console.error(err);
+    if (SR){
+      toast('No pude cargar la voz integrada. Uso la de Google por ahora.');
+      newRec();
+    } else { toast('No pude cargar la voz integrada. Revisa tu internet e intenta otra vez.'); stopListening(); }
+  }
+}
+function stopLocal(keepMic){
+  try { aSrc && aSrc.disconnect(); } catch(e){}
+  try { aNode && aNode.disconnect(); } catch(e){}
+  if (aNode) aNode.onaudioprocess = null;
+  try { vRec && vRec.remove(); } catch(e){}
+  try { aCtx && aCtx.close(); } catch(e){}
+  aSrc = aNode = vRec = aCtx = null;
+  if (!keepMic) releaseMicIfIdle();
 }
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 let recGen = 0, lastHeardAt = 0;
@@ -395,8 +527,7 @@ function newRec(){
     heard = heard.trim();
     if (!heard) return;
     lastHeardAt = Date.now();
-    follow(heard);
-    setStatus(pos >= W.length ? '¡Terminaste!' : '🎙 ' + heard.split(/\s+/).slice(-3).join(' '));
+    onHeard(heard);
   };
   r.onerror = e => {
     if (gen !== recGen) return;
@@ -420,6 +551,7 @@ function stopListening(){
   listening = false;
   prompter.classList.remove('listening'); $('micBtn').classList.remove('on');
   recGen++; killRec();
+  localGen++; stopLocal();
   setStatus('En pausa');
   paint();
 }
@@ -478,10 +610,15 @@ async function toggleRec(){
   if (!S.camOn){ S.camOn = true; store.set('camOn', true); $('camOn').checked = true; }
   await startCam();
   if (!camStream){ return; }
-  try{ micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }); }
-  catch(e){ micStream = null; toast('Grabando sin audio (no hubo permiso de micrófono).'); }
-  const tracks = [...camStream.getVideoTracks(), ...(micStream ? micStream.getAudioTracks() : [])];
-  if (listening) newRec();   // en Android abrir el micro puede cortar el reconocimiento
+  // En Android la voz de Google no puede escuchar mientras Chrome graba: cambiamos a la integrada
+  if (S.engine === 'google' && IS_ANDROID){
+    S.engine = 'local'; store.set('engine', 'local'); $('engine').value = 'local';
+    toast('Cambié a voz integrada para grabar y seguir tu voz al mismo tiempo.');
+    if (listening){ stopListening(); }
+  }
+  let mic = null;
+  try { mic = await getMic(); } catch(e){ toast('Grabando sin audio (no hubo permiso de micrófono).'); }
+  const tracks = [...camStream.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
   const mime = pickMime();
   recorder = new MediaRecorder(new MediaStream(tracks), mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
   chunks = [];
@@ -499,7 +636,7 @@ async function toggleRec(){
 async function saveRec(){
   clearInterval(recTimer);
   document.body.classList.remove('recording'); $('recBtn').classList.remove('on');
-  if (micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
+  releaseMicIfIdle();
   const type = (recorder.mimeType || 'video/webm').split(';')[0];
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
   const blob = new Blob(chunks, { type });
@@ -569,7 +706,7 @@ window.addEventListener('pointerup', () => {
 $('micBtn').onclick = () => listening ? stopListening() : startListening();
 $('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
 $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
-$('resetBtn').onclick = () => { pos = 0; manualOffset = 0; paint(true); if (listening) newRec(); };
+$('resetBtn').onclick = () => { pos = 0; manualOffset = 0; vHeard = ''; paint(true); if (listening && S.engine !== 'local') newRec(); };
 $('recBtn').onclick = toggleRec;
 $('pipBtn').onclick = togglePip;
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
@@ -577,9 +714,9 @@ if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 function open(id){ $(id).classList.add('open'); }
 function close(id){ $(id).classList.remove('open'); }
 $('editBtn').onclick = () => { $('scriptInput').value = S.script; open('editSheet'); setTimeout(()=>$('scriptInput').focus(),50); };
-$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); };
+$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); };
 $('clearBtn').onclick = () => { $('scriptInput').value = ''; $('scriptInput').focus(); };
-$('setBtn').onclick = () => open('setSheet');
+$('setBtn').onclick = () => { fillMics(); open('setSheet'); };
 $('setDone').onclick = () => close('setSheet');
 document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => { if (e.target === s) s.classList.remove('open'); }));
 
@@ -596,7 +733,18 @@ fsI.value = S.fs; lnI.value = S.lines; langI.value = S.lang;
 $('camOn').checked = S.camOn; $('camFlip').checked = S.camFlip; $('textFlip').checked = S.textFlip;
 fsI.oninput = () => { S.fs = +fsI.value; store.set('fs', S.fs); applyLook(); };
 lnI.oninput = () => { S.lines = +lnI.value; store.set('lines', S.lines); applyLook(); };
-langI.onchange = () => { S.lang = langI.value; store.set('lang', S.lang); if (listening) newRec(); };
+langI.onchange = () => { S.lang = langI.value; store.set('lang', S.lang); if (listening && S.engine !== 'local') newRec(); };
+$('engine').value = S.engine;
+$('engine').onchange = e => { const was = listening; if (was) stopListening(); S.engine = e.target.value; store.set('engine', S.engine); if (was) startListening(); };
+$('micSel').onchange = e => {
+  S.micId = e.target.value; store.set('micId', S.micId);
+  if (recorder && recorder.state === 'recording'){ toast('El micrófono nuevo se usará en la siguiente grabación.'); return; }
+  const was = listening && S.engine === 'local';
+  if (was) stopListening();
+  if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (was) startListening();
+};
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', fillMics);
 $('camOn').onchange = e => { S.camOn = e.target.checked; store.set('camOn', S.camOn); S.camOn ? startCam() : stopCam(); };
 $('camFlip').onchange = e => { S.camFlip = e.target.checked; store.set('camFlip', S.camFlip); applyLook(); };
 $('textFlip').onchange = e => { S.textFlip = e.target.checked; store.set('textFlip', S.textFlip); applyLook(); };
