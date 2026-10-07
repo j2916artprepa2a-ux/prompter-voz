@@ -133,6 +133,9 @@ textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1
 .switch:checked::after{left:21px}
 .hint{font-size:13px;color:var(--ink-dim);line-height:1.45;margin:0}
 
+#installBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(100px + env(safe-area-inset-bottom,0px));z-index:9;
+  display:flex;align-items:center;gap:10px;background:#1b1b1e;border-radius:999px;padding:6px 6px 6px 16px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.4);white-space:nowrap}
+#installBar .pill{padding:8px 14px}
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#1d1d20;color:var(--ink);
   padding:10px 16px;border-radius:12px;font-size:14px;z-index:30;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
@@ -150,6 +153,7 @@ body.pip{background:#000}
   <p id="permMsg">Los necesito para mostrarte en cámara y para seguir tu voz palabra por palabra.</p>
   <button class="pill primary" id="permBtn">Permitir cámara y micrófono</button>
   <button class="skip" id="permSkip">Usar solo texto</button>
+  <button class="pill installBtn hide" id="installBtn1">📲 Instalar como app</button>
 </div></div>
 <div id="nocam">Cámara apagada.<br>Modo solo texto: usa “Flotante” para ponerlo encima de tu app de videollamada o grabación.</div>
 
@@ -222,6 +226,8 @@ body.pip{background:#000}
     <div class="row"><label for="camFlip">Cámara en espejo</label><input type="checkbox" class="switch" id="camFlip"></div>
     <div class="row"><label for="textFlip">Texto en espejo (para cristal de teleprompter)</label><input type="checkbox" class="switch" id="textFlip"></div>
     <p class="hint">Tip: toca cualquier palabra del texto para saltar ahí. Desliza el texto arriba/abajo para moverte a mano. En Windows, “Ventana flotante” deja el texto siempre encima; arrástralo justo debajo de tu webcam.</p>
+    <div class="row installRow hide"><label>Tenerla como app en tu pantalla</label><button class="pill installBtn" id="installBtn2">📲 Instalar</button></div>
+    <p class="hint installHint hide" id="installHint"></p>
     <div class="actions"><button class="pill primary" id="setDone">Listo</button></div>
   </div>
 </div>
@@ -241,6 +247,7 @@ body.pip{background:#000}
   <p id="cueText"></p>
   <div class="actions"><button class="pill" id="cueRedo">Repetir esta toma</button><button class="pill primary" id="cueGo">Seguir</button></div>
 </div>
+<div id="installBar" class="hide"><span>📲 Instálala como app</span><button class="pill primary" id="installBtn3">Instalar</button><button class="mini" id="installX" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
 <div id="toast"></div>
 
 <script>
@@ -893,6 +900,34 @@ $('clearBtn').onclick = () => { $('scriptInput').value = ''; $('scriptInput').fo
 $('vidSave').onclick = downloadVideo;
 $('vidShare').onclick = shareVideo;
 $('vidClose').onclick = closeVideo;
+/* ---------- instalar como app ---------- */
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+let installEvt = null;
+function showInstallUI(on){
+  document.querySelectorAll('.installBtn').forEach(b => b.classList.toggle('hide', !on));
+  document.querySelector('.installRow').classList.toggle('hide', !on);
+  let dismissed = false; try { dismissed = !!sessionStorage.getItem('pv2_noInstall'); } catch(e){}
+  $('installBar').classList.toggle('hide', !on || dismissed);
+}
+async function doInstall(){
+  if (!installEvt) return;
+  installEvt.prompt();
+  const r = await installEvt.userChoice.catch(() => null);
+  installEvt = null; showInstallUI(false);
+  if (r && r.outcome === 'accepted') toast('¡Listo! Ya la tienes como app en tu pantalla.');
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (!isStandalone()) showInstallUI(true); });
+window.addEventListener('appinstalled', () => { installEvt = null; showInstallUI(false); });
+['installBtn1','installBtn2','installBtn3'].forEach(id => $(id).onclick = doInstall);
+$('installX').onclick = () => { $('installBar').classList.add('hide'); try { sessionStorage.setItem('pv2_noInstall','1'); } catch(e){} };
+// Sin botón automático (iPhone, o navegador de TikTok/WhatsApp): explicar cómo
+if (!isStandalone()){
+  const ua = navigator.userAgent, h = $('installHint');
+  if (/iPhone|iPad/.test(ua)) h.textContent = 'En iPhone: abre este link en Safari → Compartir → “Agregar a pantalla de inicio”.';
+  else if (/FBAN|FBAV|Instagram|TikTok|musical_ly|Bytedance|WhatsApp|; wv\)/i.test(ua)) h.textContent = 'Estás dentro de otra app (TikTok, WhatsApp…). Abre el link en Chrome: menú ⋮ → “Abrir en Chrome”, y ahí instálala.';
+  else h.textContent = 'Si no ves el botón: en Chrome toca ⋮ → “Instalar app” o “Agregar a pantalla principal”.';
+  h.classList.remove('hide');
+}
 $('setBtn').onclick = () => { fillMics(); open('setSheet'); };
 $('setDone').onclick = () => close('setSheet');
 document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => { if (e.target === s) s.classList.remove('open'); }));

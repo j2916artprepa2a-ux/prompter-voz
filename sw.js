@@ -1,6 +1,6 @@
 // Prompter Voz — service worker
 // Objetivo: abrir al instante y gastar cero datos después de la primera vez.
-const APP = 'prompter-app-v10';      // la app (se actualiza en segundo plano)
+const APP = 'prompter-app-v11';      // la app (se actualiza en segundo plano)
 const LIB = 'prompter-lib-v1';       // librerías pesadas (vosk.js ~6 MB): se bajan UNA vez y se quedan
 const CORE = ['./', 'index.html', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 
