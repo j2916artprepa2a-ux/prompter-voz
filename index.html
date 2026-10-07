@@ -536,6 +536,10 @@ async function fillMics(){
 
 /* ---------- voz integrada (Vosk, corre en el teléfono) ---------- */
 let voskModel = null, voskLoading = null, vRec = null, aCtx = null, aNode = null, aSrc = null, vHeard = '', localGen = 0;
+function onMobileData(){
+  const c = navigator.connection || {};
+  return c.saveData === true || c.type === 'cellular' || /^(slow-2g|2g|3g)$/.test(c.effectiveType || '');
+}
 function loadScript(src){ return new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = ko; document.head.appendChild(sc); }); }
 function openModel(url){
   return new Promise((ok, ko) => {
@@ -551,13 +555,20 @@ async function loadVosk(){
     voskLoading = (async () => {
       setStatus('Preparando voz…');
       if (!window.Vosk) await loadScript('lib/vosk.js');
+      const cached = (() => { try { return !!localStorage.getItem('pv2_voskOk'); } catch(e){ return false; } })();
+      if (!cached && onMobileData()){
+        const ok = confirm('Estás usando datos. La voz integrada se descarga UNA sola vez (≈40 MB) y después ya no gasta datos.\n\n¿Descargarla ahora?\n(Si no, se usa la voz de Google, que gasta muy poquito, pero no funciona mientras grabas en Android.)');
+        if (!ok) throw new Error('sin-datos');
+      }
       let last;
       for (const u of ['models/es.tar.gz', 'models/es-0.3.tar.gz']){
         const url = new URL(u, location.href).href;
-        try {
-          const head = await fetch(url, { method:'HEAD', cache:'no-store' });
-          if (!head.ok) { last = new Error('no existe ' + u); continue; }
-        } catch(e){ /* sin internet: puede que ya esté guardado */ }
+        if (!cached){
+          try {
+            const head = await fetch(url, { method:'HEAD', cache:'no-store' });
+            if (!head.ok) { last = new Error('no existe ' + u); continue; }
+          } catch(e){ /* sin internet: puede que ya esté guardado */ }
+        }
         try { return await withTimeout(openModel(url), 300000); }
         catch(e){ last = e; }
       }
@@ -606,7 +617,7 @@ async function startLocal(){
     if (gen !== localGen) return;
     console.error(err);
     if (SR){
-      toast('No pude cargar la voz integrada. Uso la de Google por ahora.');
+      toast(err && err.message === 'sin-datos' ? 'Va, uso la voz de Google por ahora.' : 'No pude cargar la voz integrada. Uso la de Google por ahora.');
       newRec();
     } else { toast('No pude cargar la voz integrada. Revisa tu internet e intenta otra vez.'); stopListening(); }
   }
@@ -935,6 +946,8 @@ build();
 $('permBtn').onclick = askPerms;
 $('permSkip').onclick = () => { S.camOn = false; store.set('camOn', false); $('camOn').checked = false; $('perm').classList.remove('show'); document.body.classList.add('no-camera'); };
 initPerms();
+// Si la voz integrada ya está en el cel, se prepara en segundo plano para que grabar sea instantáneo
+try { if (S.engine === 'local' && localStorage.getItem('pv2_voskOk')) setTimeout(() => loadVosk().then(() => setStatus('Lista')).catch(() => {}), 1200); } catch(e){}
 if (!SR) setStatus('Sin reconocimiento de voz: abre en Chrome o Edge');
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
