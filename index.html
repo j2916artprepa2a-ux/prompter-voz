@@ -85,6 +85,7 @@ body.land-right #prompter{left:auto;right:0;transform:translateY(-50%);border-ra
 body.land-left #flipBtn{right:10px} body.land-right #flipBtn{right:auto;left:10px}
 /* letra grande: cuadro más ancho */
 body.far #prompter{width:min(96vw,1100px)}
+body.tilted #prompter{border-radius:22px;padding:12px 18px 8px;bottom:auto;right:auto;transition:none}
 body.far.land-left #prompter,body.far.land-right #prompter{width:min(70vw,900px)}
 @media (max-width:600px){
   #prompter{width:min(74vw,300px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
@@ -1156,6 +1157,35 @@ function applyPlace(){
   if (S.place === 'camera' && side !== 'portrait') b.classList.add('land-' + side);
   if (S.far) b.classList.add('far');
   $('farBtn').classList.toggle('on', S.far);
+  placeTilt();
+}
+/* Cel de lado con la rotación automática apagada: la pantalla no gira,
+   pero el sensor sí sabe. Giramos solo el cuadro de texto para leerlo derecho, junto a la cámara. */
+let tilt = 0;   // 0 = derecho; 90 = cel girado con la cámara a tu izquierda; -90 = a tu derecha
+function onMotion(e){
+  const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+  const x = g.x, y = g.y;
+  let t = tilt;
+  if (Math.abs(x) > 7 && Math.abs(x) > Math.abs(y) + 2) t = x > 0 ? 90 : -90;
+  else if (Math.abs(y) > 7 && Math.abs(y) > Math.abs(x) + 2) t = 0;
+  if (t !== tilt){ tilt = t; placeTilt(); }
+}
+window.addEventListener('devicemotion', onMotion);
+function placeTilt(){
+  const st = prompter.style;
+  const screenTurned = innerWidth > innerHeight;          // si la pantalla sí giró, ya se acomoda solo
+  const on = tilt !== 0 && !screenTurned && !document.body.classList.contains('pip');
+  document.body.classList.toggle('tilted', on);
+  if (!on){ st.width = st.left = st.top = st.transform = ''; requestAnimationFrame(() => paint(true)); return; }
+  const W = Math.round(Math.min(innerHeight * (S.far ? 0.86 : 0.62), S.far ? 1000 : 560));
+  st.width = W + 'px'; st.transform = 'none'; st.left = '0px'; st.top = '0px';
+  const H = prompter.offsetHeight;
+  st.left = Math.round(innerWidth / 2 - W / 2) + 'px';
+  // junto a la cámara (arriba de la pantalla = a tu lado al voltear el cel) o en medio
+  const cy = S.place === 'camera' && !S.far ? W / 2 + 6 : innerHeight / 2;
+  st.top = Math.round(cy - H / 2) + 'px';
+  st.transform = 'rotate(' + tilt + 'deg)';
+  requestAnimationFrame(() => paint(true));
 }
 function applyLook(){
   const r = document.documentElement.style;
