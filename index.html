@@ -49,7 +49,7 @@ body.no-camera #nocam{display:flex}
   transition:transform .35s cubic-bezier(.2,.7,.2,1);will-change:transform;text-wrap:pretty}
 #text .w{color:rgba(255,255,255,.93);transition:color .2s;cursor:pointer}
 #text .w.read{color:rgba(255,255,255,.3)}
-#text .w.cur{color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.22em;text-decoration-color:rgba(255,255,255,.85)}
+#text .w.cur{color:#ffd34d;text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:.2em;text-decoration-color:#ffd34d}
 #text .br{display:block;height:0}
 #text .dir{display:inline-block;font-size:.6em;font-weight:600;color:#ffd34d;background:rgba(255,211,77,.13);border-radius:6px;padding:.05em .45em;vertical-align:.18em;line-height:1.3}
 #text .brk{display:block;font-size:.55em;color:rgba(255,255,255,.38);letter-spacing:.06em;margin:.15em 0;line-height:1.6}
@@ -68,7 +68,9 @@ body.no-camera #nocam{display:flex}
 #status{font-size:10px;color:rgba(255,255,255,.45);max-width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mini{width:22px;height:22px;border:0;background:none;padding:0;display:grid;place-items:center;color:rgba(255,255,255,.5);cursor:pointer}
 .mini svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-#prompter.listening #miniMic{color:#ffd34d;animation:pulse 1.4s ease-in-out infinite}
+#prompter.listening #miniMic{color:#ffd34d}
+#miniMic{transform:scale(calc(1 + var(--lvl,0) * .9));transition:transform .08s}
+#progress{opacity:calc(.55 + var(--lvl,0) * .45)}
 @keyframes pulse{50%{opacity:.45}}
 #prompter.min{width:120px}
 #farBtn.on{color:#ffd34d}
@@ -641,6 +643,37 @@ function grammarJSON(){
   }
   return JSON.stringify([...set, '[unk]']);
 }
+/* El reconocedor se crea UNA vez (con las palabras del guion) y se queda listo.
+   Solo se le manda audio cuando ya terminó de prepararse: así no se acumula retraso. */
+let kRec = null, kKey = '', kReady = false, vActive = false;
+const VOSK_SR = 16000;
+function getRecognizer(model){
+  const key = grammarJSON();
+  if (kRec && kKey === key) return kRec;
+  try { kRec && kRec.remove(); } catch(e){}
+  kReady = false; kKey = key;
+  const r = new model.KaldiRecognizer(VOSK_SR, key);
+  r.on('result', m => {
+    if (r !== kRec) return;
+    if (!kReady){ kReady = true; if (vActive) setStatus('Escuchando…'); return; }   // respuesta a la prueba: ya está listo
+    if (!vActive) return;
+    const t = m.result && m.result.text; if (!t) return;
+    vHeard = (vHeard + ' ' + t).trim().split(/\s+/).slice(-12).join(' ');
+    onHeard(vHeard);
+  });
+  r.on('partialresult', m => {
+    if (r !== kRec || !kReady || !vActive) return;
+    const pt = m.result && m.result.partial; if (!pt) return;
+    onHeard((vHeard + ' ' + pt).trim());
+  });
+  // prueba: un pedacito de silencio + pedir resultado; cuando conteste, ya está listo
+  try { r.acceptWaveformFloat(new Float32Array(VOSK_SR / 10), VOSK_SR); r.retrieveFinalResult(); } catch(e){ kReady = true; }
+  kRec = r;
+  return r;
+}
+function warmVoice(){   // deja la voz lista en segundo plano
+  return loadVosk().then(m => { getRecognizer(m); return m; });
+}
 async function startLocal(){
   const gen = ++localGen;
   try{
@@ -648,24 +681,24 @@ async function startLocal(){
     const stream = await getMic();
     if (gen !== localGen || !listening) return;
     stopLocal(true);
-    aCtx = new (window.AudioContext || window.webkitAudioContext)();
+    getRecognizer(model);
+    try { aCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: VOSK_SR }); }
+    catch(e){ aCtx = new (window.AudioContext || window.webkitAudioContext)(); }
     try { await aCtx.resume(); } catch(e){}
-    aSrc = aCtx.createMediaStreamSource(stream);
-    vRec = new model.KaldiRecognizer(aCtx.sampleRate, grammarJSON());
-    vHeard = '';
-    vRec.on('result', m => {
-      const t = m.result && m.result.text; if (!t) return;
-      vHeard = (vHeard + ' ' + t).trim().split(/\s+/).slice(-12).join(' ');
-      onHeard(vHeard);
-    });
-    vRec.on('partialresult', m => {
-      const pt = m.result && m.result.partial; if (!pt) return;
-      onHeard((vHeard + ' ' + pt).trim());
-    });
-    aNode = aCtx.createScriptProcessor(4096, 1, 1);
-    aNode.onaudioprocess = e => { if (vRec) try { vRec.acceptWaveform(e.inputBuffer); } catch(err){} };
+    try { aSrc = aCtx.createMediaStreamSource(stream); }
+    catch(e){ try { aCtx.close(); } catch(_){} aCtx = new (window.AudioContext || window.webkitAudioContext)(); aSrc = aCtx.createMediaStreamSource(stream); }
+    vHeard = ''; vActive = true; vRec = kRec;
+    const sr = aCtx.sampleRate;
+    aNode = aCtx.createScriptProcessor(2048, 1, 1);
+    aNode.onaudioprocess = e => {
+      const d = e.inputBuffer.getChannelData(0);
+      let sum = 0; for (let i = 0; i < d.length; i += 8) sum += d[i] * d[i];
+      prompter.style.setProperty('--lvl', Math.min(1, Math.sqrt(sum / (d.length / 8)) * 6).toFixed(2));
+      if (!kReady || !vActive || !kRec) return;          // si aún se prepara, no se acumula audio viejo
+      try { kRec.acceptWaveformFloat(new Float32Array(d), sr); } catch(err){}
+    };
     aSrc.connect(aNode); aNode.connect(aCtx.destination);
-    setStatus('Escuchando…');
+    setStatus(kReady ? 'Escuchando…' : 'Preparando voz…');
   }catch(err){
     if (gen !== localGen) return;
     console.error(err);
@@ -676,11 +709,12 @@ async function startLocal(){
   }
 }
 function stopLocal(keepMic){
+  vActive = false; prompter.style.setProperty('--lvl', 0);
   try { aSrc && aSrc.disconnect(); } catch(e){}
   try { aNode && aNode.disconnect(); } catch(e){}
   if (aNode) aNode.onaudioprocess = null;
-  try { vRec && vRec.remove(); } catch(e){}
   try { aCtx && aCtx.close(); } catch(e){}
+  if (vRec){ try { vRec.retrieveFinalResult(); } catch(e){} }   // limpia lo pendiente (se ignora)
   aSrc = aNode = vRec = aCtx = null;
   if (!keepMic) releaseMicIfIdle();
 }
@@ -1064,7 +1098,7 @@ if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 function open(id){ $(id).classList.add('open'); }
 function close(id){ $(id).classList.remove('open'); }
 $('editBtn').onclick = () => { $('scriptInput').value = S.script; open('editSheet'); setTimeout(()=>$('scriptInput').focus(),50); };
-$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); };
+$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); else if (voskModel) getRecognizer(voskModel); };
 $('salesBtn').onclick = () => { $('scriptInput').value = SALES_SCRIPT; };
 $('exBtn').onclick = () => { $('scriptInput').value = DEFAULT_SCRIPT; };
 $('cueGo').onclick = cueGo;
@@ -1190,7 +1224,7 @@ $('permBtn').onclick = askPerms;
 $('permSkip').onclick = () => { S.camOn = false; store.set('camOn', false); $('camOn').checked = false; $('perm').classList.remove('show'); document.body.classList.add('no-camera'); };
 initPerms();
 // Si la voz integrada ya está en el cel, se prepara en segundo plano para que grabar sea instantáneo
-try { if (S.engine === 'local' && localStorage.getItem('pv2_voskOk')) setTimeout(() => loadVosk().then(() => setStatus('Lista')).catch(() => {}), 1200); } catch(e){}
+try { if (S.engine === 'local' && localStorage.getItem('pv2_voskOk')) setTimeout(() => warmVoice().then(() => setStatus('Lista')).catch(() => {}), 1200); } catch(e){}
 if (!SR) setStatus('Sin reconocimiento de voz: abre en Chrome o Edge');
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
