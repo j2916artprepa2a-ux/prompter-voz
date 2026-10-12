@@ -106,6 +106,10 @@ body.recording:not(.paused) #recBtn i::after{right:16px}
 body.recording #doneBtn{display:grid}
 body.recording #editBtn,body.recording #setBtn,body.recording #pipBtn{display:none}
 body.paused #recTime{background:#3a3a3e}
+#flipBtn{position:fixed;right:10px;top:calc(var(--top) + 10px);width:42px;height:42px;z-index:8}
+#flipBtn svg{width:20px;height:20px}
+body.no-camera #flipBtn,body.pip #flipBtn{display:none}
+body.recording:not(.paused) #flipBtn{opacity:.35}
 #undoBtn{display:none}
 body.paused #undoBtn.has{display:grid}
 #undoBtn.armed{background:var(--rec);color:#fff}
@@ -182,6 +186,8 @@ body.pip{background:#000}
 
 <div id="segBar"></div>
 <div id="mergeMsg"><div class="spin"></div><span id="mergeTxt">Uniendo tus clips…</span></div>
+<button class="b" id="flipBtn" title="Voltear cámara" aria-label="Voltear cámara">
+  <svg viewBox="0 0 24 24"><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M16 11l2 2 2-2M8 13l-2-2-2 2M18 13V9a3 3 0 0 0-3-3M6 11v4a3 3 0 0 0 3 3"/></svg></button>
 <div id="recTime">● 00:00</div>
 
 <div id="bar">
@@ -316,6 +322,7 @@ const S = {
   lang: store.get('lang', 'es-MX'),
   engine: store.get('engine', /Android/i.test(navigator.userAgent) ? 'local' : 'google'),
   micId: store.get('micId', ''),
+  facing: store.get('facing', 'user'),
   camOn: store.get('camOn', true),
   camFlip: store.get('camFlip', true),
   textFlip: store.get('textFlip', false),
@@ -715,7 +722,7 @@ let camStream = null;
 async function askPerms(){
   try{
     const st = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:'user', width:{ideal:1920}, height:{ideal:1080} }, audio:true });
+      video: camConstraints(), audio:true });
     st.getAudioTracks().forEach(t => t.stop());           // el micro solo era para el permiso
     camStream = new MediaStream(st.getVideoTracks());
     video.srcObject = camStream;
@@ -733,13 +740,28 @@ async function initPerms(){
   if (state === 'granted') startCam();
   else { document.body.classList.add('no-camera'); $('perm').classList.add('show'); }
 }
+function camConstraints(){ return { facingMode: { ideal: S.facing }, width:{ ideal:1920 }, height:{ ideal:1080 } }; }
+function applyMirror(){ video.classList.toggle('mirror', S.camFlip && S.facing === 'user'); }
+// Voltear cámara (selfie ⇄ trasera). Grabando, solo en pausa: cada clip queda con una cámara.
+async function flipCam(){
+  if (isRecording()){ toast('Pausa primero para voltear la cámara.'); return; }
+  if (recBusyOp) return;
+  S.facing = S.facing === 'user' ? 'environment' : 'user'; store.set('facing', S.facing);
+  if (camStream){ camStream.getVideoTracks().forEach(t => t.stop()); camStream = null; }
+  await startCam();
+  applyMirror();
+  if (camStream && recSession && recStream){
+    recStream = new MediaStream([...camStream.getVideoTracks(), ...recStream.getAudioTracks()]);
+  }
+  toast(S.facing === 'user' ? 'Cámara de selfie' : 'Cámara trasera');
+}
 async function startCam(){
   if (!S.camOn){ document.body.classList.add('no-camera'); return; }
   document.body.classList.remove('no-camera');
   if (camStream) return;
   try{
     camStream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:'user', width:{ideal:1920}, height:{ideal:1080} }, audio:false });
+      video: camConstraints(), audio:false });
     video.srcObject = camStream;
   }catch(err){
     document.body.classList.add('no-camera');
@@ -1012,6 +1034,7 @@ $('resetBtn').onclick = () => { pos = 0; manualOffset = 0; vHeard = ''; paint(tr
 $('recBtn').onclick = toggleRec;
 $('doneBtn').onclick = finishRec;
 $('undoBtn').onclick = undoClip;
+$('flipBtn').onclick = flipCam;
 $('pipBtn').onclick = togglePip;
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 
@@ -1062,7 +1085,7 @@ document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e =
 function applyLook(){
   const r = document.documentElement.style;
   r.setProperty('--fs', S.fs + 'px'); r.setProperty('--lines', S.lines);
-  video.classList.toggle('mirror', S.camFlip);
+  applyMirror();
   prompter.classList.toggle('mirror-text', S.textFlip);
   if (pipWin) pipWin.document.documentElement.style.cssText = r.cssText;
   requestAnimationFrame(() => paint(true));
