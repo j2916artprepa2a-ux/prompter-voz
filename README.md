@@ -30,7 +30,9 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 - 🎧 **Micrófono externo**: elige en Ajustes el micrófono USB-C, de solapa o inalámbrico.
 - 🔁 **Te alcanza si te saltas algo**: si brincas una frase, se ubica solo. Si repites palabras o hay ruido, no se mueve de más.
 - 📷 **Texto debajo de la cámara**: panel tipo *notch* arriba de la pantalla, pegado al lente frontal.
-- ⏺️ **Graba video con audio** desde la app y lo guarda (en Android lo puedes compartir directo).
+- ⏺️ **Graba video con audio** desde la app y lo guarda solo al terminar.
+- ⏸️ **Clips como TikTok**: pausa y sigue; si no te gustó el último clip, bórralo (⌫) y el texto regresa a donde empezaba. Al final los clips se unen en un solo video dentro del cel ([ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm)).
+- 🎬 **Ayudante de tomas**: escribe `[PAUSA]` y `[indicaciones]` en tu guion; se pausa solo al terminar cada toma y te dice qué sigue.
 - 🪟 **Ventana flotante en Windows**: el texto queda **siempre encima** de cualquier app (Zoom, OBS, Cámara de Windows, Meet…). Arrástrala debajo de tu webcam.
 - 👆 Toca cualquier palabra para saltar ahí o arrastra el texto con el dedo.
 - 🔤 Tamaño de letra, líneas visibles, idioma de voz y modo espejo para cristal de teleprompter.
@@ -69,6 +71,7 @@ index.html      # toda la app (interfaz + seguimiento de voz + cámara + grabaci
 manifest.json   # datos para instalarla como app
 sw.js           # funciona offline
 lib/vosk.js     # reconocimiento de voz en el navegador (Vosk, Apache 2.0)
+lib/ffmpeg/     # unir clips en un solo video (ffmpeg.wasm)
 models/         # modelo de voz en español (lo descarga la acción de GitHub)
 icons/          # íconos
 ```

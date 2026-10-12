@@ -106,6 +106,19 @@ body.recording:not(.paused) #recBtn i::after{right:16px}
 body.recording #doneBtn{display:grid}
 body.recording #editBtn,body.recording #setBtn,body.recording #pipBtn{display:none}
 body.paused #recTime{background:#3a3a3e}
+#undoBtn{display:none}
+body.paused #undoBtn.has{display:grid}
+#undoBtn.armed{background:var(--rec);color:#fff}
+body.recording #resetBtn,body.recording #micBtn{display:none}
+#segBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(132px + env(safe-area-inset-bottom,0px));width:min(80vw,420px);height:5px;
+  display:none;gap:3px;z-index:7}
+body.recording #segBar{display:flex}
+#segBar i{display:block;flex:1 1 0;min-width:4px;background:var(--rec);border-radius:3px}
+#segBar i.last{background:#ff8a80}
+#mergeMsg{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-size:16px}
+#mergeMsg.show{display:flex}
+#mergeMsg .spin{width:38px;height:38px;border-radius:50%;border:4px solid rgba(255,255,255,.2);border-top-color:#ffd34d;animation:sp 0.9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 #recTime{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:7;background:var(--rec);color:#fff;
   font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;display:none;font-variant-numeric:tabular-nums}
 body.recording #recTime{display:block}
@@ -167,6 +180,8 @@ body.pip{background:#000}
   </div>
 </div>
 
+<div id="segBar"></div>
+<div id="mergeMsg"><div class="spin"></div><span id="mergeTxt">Uniendo tus clips…</span></div>
 <div id="recTime">● 00:00</div>
 
 <div id="bar">
@@ -176,6 +191,8 @@ body.pip{background:#000}
     <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
   <button class="b big" id="micBtn" title="Seguir mi voz" aria-label="Seguir mi voz">
     <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
+  <button class="b" id="undoBtn" title="Borrar último clip" aria-label="Borrar último clip">
+    <svg viewBox="0 0 24 24"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"/><path d="M17 9l-6 6M11 9l6 6"/></svg></button>
   <button class="b big" id="recBtn" title="Grabar / pausar" aria-label="Grabar o pausar"><i></i></button>
   <button class="b" id="doneBtn" title="Terminar y guardar" aria-label="Terminar y guardar">
     <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
@@ -369,9 +386,8 @@ function takeIndexAt(p){ for (let k = 0; k < takeEnds.length; k++) if (p < takeE
 /* ---------- ayudante de tomas: pausa sola al terminar cada parte ---------- */
 function takeDone(k){
   const n = takeEnds.length, isLast = k >= n - 1;
-  const rec = recorder && recorder.state === 'recording';
-  if (rec) pauseRec(); else if (listening) stopListening();
-  const recOn = recorder && recorder.state !== 'inactive';
+  if (isRecording()) pauseRec(); else if (listening) stopListening();
+  const recOn = recSession;
   $('cueTitle').textContent = isLast ? '¡Terminaste el guion! 🎉' : `Toma ${k+1} de ${n} lista ✓`;
   $('cueText').textContent = isLast
     ? (recOn ? 'Toca ✓ para guardar tu video.' : 'Buen ensayo. Ahora dale a grabar ●.')
@@ -385,9 +401,9 @@ function hideCue(){ $('cue').classList.remove('show'); }
 function cueGo(){
   const isLast = $('cue').dataset.last === '1';
   hideCue();
-  const recOn = recorder && recorder.state !== 'inactive';
+  const recOn = recSession;
   if (isLast){ if (recOn) finishRec(); return; }
-  if (recorder && recorder.state === 'paused') resumeRec();
+  if (recSession && !isRecording()) resumeRec();
   else if (!listening) startListening();
 }
 function cueRedo(){   // solo en ensayo (sin grabar): vuelve al inicio de esa toma
@@ -525,7 +541,7 @@ async function getMic(){
   return micStream;
 }
 function releaseMicIfIdle(){
-  const recBusy = recorder && recorder.state !== 'inactive';
+  const recBusy = recSession;
   if (!vRec && !recBusy && micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 }
 async function fillMics(){
@@ -735,15 +751,23 @@ function stopCam(){
   document.body.classList.add('no-camera');
 }
 
-let recorder = null, chunks = [], recStart = 0, recTimer = 0, micStream = null, recAcc = 0, resumeVoice = false;
+let recTimer = 0, micStream = null, resumeVoice = false, recSession = false, recBusyOp = false;
+/* Grabación por clips (como TikTok):
+   cada vez que pausas, ese clip se cierra como archivo propio.
+   - Borrar el último clip = tirar ese archivo y regresar el texto.
+   - Si solo hay un clip se guarda al instante; si hay varios se unen en uno solo (dentro del cel). */
+let clips = [], recMime = '', clipStart = 0, curClip = null;
+const isRecording = () => !!(curClip && curClip.rec && curClip.rec.state === 'recording');
+const allClips = () => clips.concat(curClip ? [curClip] : []);
 function pickMime(){
   const c = ['video/mp4;codecs=avc1,mp4a','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
   for (const m of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
   return '';
 }
+let recStream = null;
 async function toggleRec(){
-  if (recorder && recorder.state === 'recording'){ pauseRec(); return; }
-  if (recorder && recorder.state === 'paused'){ resumeRec(); return; }
+  if (recBusyOp) return;
+  if (recSession){ if (isRecording()) await pauseRec(); else await resumeRec(); return; }
   if (!window.MediaRecorder){ toast('Tu navegador no puede grabar video aquí.'); return; }
   if (!S.camOn){ S.camOn = true; store.set('camOn', true); $('camOn').checked = true; }
   await startCam();
@@ -756,54 +780,156 @@ async function toggleRec(){
   }
   let mic = null;
   try { mic = await getMic(); } catch(e){ toast('Grabando sin audio (no hubo permiso de micrófono).'); }
-  const tracks = [...camStream.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
-  const mime = pickMime();
-  recorder = new MediaRecorder(new MediaStream(tracks), mime ? { mimeType: mime, videoBitsPerSecond: 3.5e6, audioBitsPerSecond: 128000 } : undefined);
-  chunks = [];
-  recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-  recorder.onstop = saveRec;
-  recorder.start(1000);
-  recStart = Date.now(); recAcc = 0;
-  document.body.classList.add('recording'); document.body.classList.remove('paused'); $('recBtn').classList.add('on');
-  recTimer = setInterval(drawRecTime, 250); drawRecTime();
+  recStream = new MediaStream([...camStream.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])]);
+  recMime = pickMime(); clips = []; recSession = true;
+  recTimer = setInterval(drawRecTime, 250);
+  startClip();
   if (!listening) startListening();
   const k0 = takeIndexAt(pos);
   if (takeCues[k0]) toast('Toma ' + (k0+1) + ': ' + takeCues[k0]);
 }
-function recElapsed(){ return recAcc + (recorder && recorder.state === 'recording' ? Date.now() - recStart : 0); }
+function startClip(){
+  const rec = new MediaRecorder(recStream, recMime ? { mimeType: recMime, videoBitsPerSecond: 3.5e6, audioBitsPerSecond: 128000 } : undefined);
+  const c = { rec, chunks: [], dur: 0, posStart: pos };
+  rec.ondataavailable = e => { if (e.data && e.data.size) c.chunks.push(e.data); };
+  rec.start(1000);
+  curClip = c; clipStart = Date.now();
+  document.body.classList.add('recording'); document.body.classList.remove('paused'); $('recBtn').classList.add('on');
+  drawRecTime();
+}
+function closeClip(){   // termina el clip actual y espera su archivo
+  const c = curClip; if (!c) return Promise.resolve();
+  curClip = null;
+  c.dur = Date.now() - clipStart; c.posEnd = pos;
+  return new Promise(res => { c.rec.onstop = res; try { c.rec.stop(); } catch(e){ res(); } setTimeout(res, 3000); })
+    .then(() => { c.rec = null; if (c.chunks.length) clips.push(c); });
+}
+function recElapsed(){ return clips.reduce((a, c) => a + c.dur, 0) + (isRecording() ? Date.now() - clipStart : 0); }
 function drawRecTime(){
   const s = Math.floor(recElapsed() / 1000);
   const t = String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
-  $('recTime').textContent = (recorder && recorder.state === 'paused' ? '❚❚ ' : '● ') + t;
+  $('recTime').textContent = (recSession && !isRecording() ? '❚❚ ' : '● ') + t;
+  drawSegs();
 }
-// Pausa estilo TikTok: el video sigue siendo uno solo, el texto se queda donde ibas
-function pauseRec(){
-  if (!recorder || recorder.state !== 'recording') return;
-  recorder.pause(); recAcc += Date.now() - recStart;
+function drawSegs(){
+  const bar = $('segBar'); bar.innerHTML = '';
+  clips.forEach((c, i) => {
+    const el = document.createElement('i'); el.style.flexGrow = Math.max(c.dur, 1);
+    if (i === clips.length - 1 && !isRecording()) el.className = 'last';
+    bar.appendChild(el);
+  });
+  if (isRecording()){ const el = document.createElement('i'); el.style.flexGrow = Math.max(Date.now() - clipStart, 1); bar.appendChild(el); }
+  $('undoBtn').classList.toggle('has', clips.length > 0);
+}
+// Pausa estilo TikTok: el texto se queda donde ibas
+async function pauseRec(){
+  if (!isRecording()) return;
+  recBusyOp = true;
   document.body.classList.add('paused');
   resumeVoice = listening; if (listening) stopListening();
+  await closeClip();
+  recBusyOp = false;
   setStatus('Pausado'); drawRecTime();
+  if (clips.length >= 1) preloadMerger();     // deja lista la unión en segundo plano
 }
-function resumeRec(){
-  if (!recorder || recorder.state !== 'paused') return;
-  recorder.resume(); recStart = Date.now(); hideCue();
-  document.body.classList.remove('paused');
+async function resumeRec(){
+  if (!recSession || isRecording() || recBusyOp) return;
+  hideCue(); disarmUndo();
+  startClip();
   if (resumeVoice && !listening) startListening();
+}
+// Borrar el último clip (solo en pausa): el texto regresa a donde empezaba ese clip
+let undoArmed = 0;
+function disarmUndo(){ undoArmed = 0; $('undoBtn').classList.remove('armed'); }
+function undoClip(){
+  if (!recSession || isRecording() || recBusyOp || !clips.length) return;
+  if (!undoArmed || Date.now() - undoArmed > 4000){
+    undoArmed = Date.now(); $('undoBtn').classList.add('armed');
+    toast('Toca otra vez para borrar el último clip'); return;
+  }
+  disarmUndo();
+  const c = clips.pop();
+  pos = c.posStart; manualOffset = 0; hideCue(); paint();
   drawRecTime();
+  toast('Clip borrado. Vuelve a grabar desde aquí.');
+  setStatus(clips.length ? 'Pausado' : 'Listo para grabar');
 }
-function finishRec(){
-  if (recorder && recorder.state !== 'inactive') recorder.stop();
-}
-async function saveRec(){
+async function finishRec(){
+  if (!recSession || recBusyOp) return;
+  recBusyOp = true;
+  if (isRecording()){ if (listening) stopListening(); await closeClip(); }
   clearInterval(recTimer);
+  recSession = false; recBusyOp = false; disarmUndo();
   document.body.classList.remove('recording', 'paused'); $('recBtn').classList.remove('on');
+  $('segBar').innerHTML = '';
+  if (listening) stopListening();
   releaseMicIfIdle();
-  const type = (recorder.mimeType || 'video/webm').split(';')[0];
+  const type = (recMime || 'video/webm').split(';')[0];
+  const blobs = clips.map(c => new Blob(c.chunks, { type }));
+  clips = [];
+  if (!blobs.length){ toast('No hay nada grabado.'); return; }
+  if (blobs.length === 1) return saveVideo(blobs[0], type);
+  try {
+    const merged = await mergeVideos(blobs, type);
+    saveVideo(merged, type);
+  } catch(e){
+    console.error(e);
+    toast('No pude unir los clips; te los guardo por separado.');
+    blobs.forEach((bl, i) => setTimeout(() => saveVideo(bl, type, i + 1), i * 800));
+  }
+}
+/* Unir clips en un solo video, dentro del cel (ffmpeg.wasm, se descarga una vez ~32 MB) */
+let ffmpegInst = null, ffmpegLoading = null;
+function ffCached(){ try { return !!localStorage.getItem('pv2_ffOk'); } catch(e){ return false; } }
+function loadMerger(){
+  if (ffmpegInst) return Promise.resolve(ffmpegInst);
+  if (!ffmpegLoading){
+    ffmpegLoading = (async () => {
+      if (!window.FFmpegWASM) await loadScript('lib/ffmpeg/ffmpeg.js');
+      const ff = new FFmpegWASM.FFmpeg();
+      await ff.load({
+        coreURL: new URL('lib/ffmpeg/ffmpeg-core.js', location.href).href,
+        wasmURL: new URL('lib/ffmpeg/ffmpeg-core.wasm', location.href).href,
+      });
+      try { localStorage.setItem('pv2_ffOk', '1'); } catch(e){}
+      ffmpegInst = ff; return ff;
+    })().catch(e => { ffmpegLoading = null; throw e; });
+  }
+  return ffmpegLoading;
+}
+function preloadMerger(){ if (ffCached() || !onMobileData()) loadMerger().catch(() => {}); }
+async function mergeVideos(blobs, type){
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
-  const blob = new Blob(chunks, { type });
-  const name = 'prompter-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.' + ext;
+  const cached = ffCached();
+  if (!ffmpegInst && !cached && onMobileData() && !confirm('Para unir tus clips necesito una herramienta de video (≈32 MB, solo una vez).\n\n¿Descargarla ahora con datos?\n(Si no, te guardo los clips por separado.)')) throw new Error('sin-datos');
+  $('mergeMsg').classList.add('show');
+  $('mergeTxt').textContent = ffmpegInst || cached ? 'Uniendo tus clips…' : 'Preparando para unir tus clips (solo la primera vez)…';
+  try {
+    await loadMerger();
+    $('mergeTxt').textContent = 'Uniendo tus clips…';
+    const ff = ffmpegInst; let list = '';
+    for (let i = 0; i < blobs.length; i++){
+      await ff.writeFile('c' + i + '.' + ext, new Uint8Array(await blobs[i].arrayBuffer()));
+      list += "file 'c" + i + '.' + ext + "'\n";
+    }
+    await ff.writeFile('l.txt', new TextEncoder().encode(list));
+    const out = 'out.' + ext;
+    const code = await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'l.txt', '-c', 'copy', ...(ext === 'mp4' ? ['-movflags', '+faststart'] : []), out]);
+    if (code !== 0) throw new Error('ffmpeg ' + code);
+    const data = await ff.readFile(out);
+    for (let i = 0; i < blobs.length; i++) { try { await ff.deleteFile('c' + i + '.' + ext); } catch(e){} }
+    try { await ff.deleteFile(out); } catch(e){}
+    return new Blob([data], { type });
+  } finally {
+    $('mergeMsg').classList.remove('show');
+  }
+}
+function saveVideo(blob, type, part){
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const name = 'prompter-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + (part ? '-clip' + part : '') + '.' + ext;
   lastVideo = new File([blob], name, { type });
-  $('vidPrev').src = URL.createObjectURL(blob);
+  const v = $('vidPrev'); if (v.src) URL.revokeObjectURL(v.src);
+  v.src = URL.createObjectURL(blob);
   const canShare = navigator.canShare && navigator.canShare({ files:[lastVideo] });
   $('vidShare').classList.toggle('hide', !canShare);
   downloadVideo();               // se guarda solo, sin pasos extra
@@ -885,6 +1011,7 @@ $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'
 $('resetBtn').onclick = () => { pos = 0; manualOffset = 0; vHeard = ''; paint(true); if (listening && S.engine !== 'local') newRec(); };
 $('recBtn').onclick = toggleRec;
 $('doneBtn').onclick = finishRec;
+$('undoBtn').onclick = undoClip;
 $('pipBtn').onclick = togglePip;
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 
@@ -950,7 +1077,7 @@ $('engine').value = S.engine;
 $('engine').onchange = e => { const was = listening; if (was) stopListening(); S.engine = e.target.value; store.set('engine', S.engine); if (was) startListening(); };
 $('micSel').onchange = e => {
   S.micId = e.target.value; store.set('micId', S.micId);
-  if (recorder && recorder.state === 'recording'){ toast('El micrófono nuevo se usará en la siguiente grabación.'); return; }
+  if (recSession){ toast('El micrófono nuevo se usará en la siguiente grabación.'); return; }
   const was = listening && S.engine === 'local';
   if (was) stopListening();
   if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
