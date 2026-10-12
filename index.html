@@ -71,6 +71,19 @@ body.no-camera #nocam{display:flex}
 #prompter.listening #miniMic{color:#ffd34d;animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
 #prompter.min{width:120px}
+#farBtn.on{color:#ffd34d}
+/* en medio */
+body.pos-center #prompter{top:46%;transform:translate(-50%,-50%);border-radius:22px;padding:12px 20px 8px;width:min(92vw,760px)}
+/* abajo */
+body.pos-bottom #prompter{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px));border-radius:22px;padding:12px 20px 8px;width:min(92vw,760px)}
+/* celular de lado: pegado al lado donde quedó la cámara */
+body.land-left #prompter,body.land-right #prompter{top:50%;width:min(44vw,520px);padding:12px 18px 8px}
+body.land-left #prompter{left:0;transform:translateY(-50%);border-radius:0 22px 22px 0;padding-left:calc(env(safe-area-inset-left,0px) + 16px)}
+body.land-right #prompter{left:auto;right:0;transform:translateY(-50%);border-radius:22px 0 0 22px;padding-right:calc(env(safe-area-inset-right,0px) + 16px)}
+body.land-left #flipBtn{right:10px} body.land-right #flipBtn{right:auto;left:10px}
+/* letra grande: cuadro más ancho */
+body.far #prompter{width:min(96vw,1100px)}
+body.far.land-left #prompter,body.far.land-right #prompter{width:min(70vw,900px)}
 @media (max-width:600px){
   #prompter{width:min(74vw,300px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
   #pfoot{height:16px;margin-top:3px;gap:6px}
@@ -179,6 +192,7 @@ body.pip{background:#000}
   <div id="pfoot">
     <div id="progress"><i></i></div>
     <span id="status">Toca el micrófono</span>
+    <button class="mini" id="farBtn" aria-label="Letra grande"><svg viewBox="0 0 24 24"><path d="M3 19L9 5l6 14M5.5 14h7"/><path d="M17 9v8M14.5 11.5L17 9l2.5 2.5"/></svg></button>
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
@@ -229,6 +243,13 @@ body.pip{background:#000}
     <h2>Ajustes</h2>
     <div class="row"><label for="fs">Tamaño de letra</label><input type="range" id="fs" min="13" max="48" step="1"></div>
     <div class="row"><label for="lines">Líneas visibles</label><input type="range" id="lines" min="1" max="6" step="1"></div>
+    <div class="row"><label for="place">Dónde va el texto</label>
+      <select id="place">
+        <option value="camera">Junto a la cámara</option>
+        <option value="center">En medio</option>
+        <option value="bottom">Abajo</option>
+      </select></div>
+    <div class="row"><label for="farOn">Letra grande (para grabar de lejos)</label><input type="checkbox" class="switch" id="farOn"></div>
     <div class="row"><label for="lang">Idioma de tu voz</label>
       <select id="lang">
         <option value="es-MX">Español (México)</option>
@@ -319,6 +340,8 @@ const S = {
   script: store.get('script', DEFAULT_SCRIPT),
   fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
   lines: store.get('lines', 3),
+  place: store.get('place', 'camera'),
+  far: store.get('far', false),
   lang: store.get('lang', 'es-MX'),
   engine: store.get('engine', /Android/i.test(navigator.userAgent) ? 'local' : 'google'),
   micId: store.get('micId', ''),
@@ -983,7 +1006,7 @@ async function togglePip(){
   if (!('documentPictureInPicture' in window)){
     toast('La ventana flotante funciona en Chrome o Edge de computadora.'); return;
   }
-  const h = Math.round(S.fs * 1.32 * S.lines + 52);
+  const h = Math.round(fsEff() * 1.32 * S.lines + 52);
   pipWin = await documentPictureInPicture.requestWindow({ width: Math.min(900, screen.availWidth*0.6|0), height: h });
   const st = document.querySelector('style').cloneNode(true);
   pipWin.document.head.appendChild(st);
@@ -1019,7 +1042,7 @@ window.addEventListener('pointerup', () => {
   if (dragY === null) return; dragY = null; textEl.style.transition = '';
   if (Math.abs(manualOffset - dragBase) > 6){
     // fija la posición en la primera palabra visible de la línea superior
-    const lh = S.fs * 1.32, top = -parseFloat(textEl.style.transform.replace(/[^\d.-]/g,'') || 0);
+    const lh = fsEff() * 1.32, top = -parseFloat(textEl.style.transform.replace(/[^\d.-]/g,'') || 0);
     const keep = S.lines >= 3 ? 1 : 0;
     const want = top + keep * lh;
     let k = 0; while (k < W.length - 1 && spans[W[k]].offsetTop + lh/2 < want) k++;
@@ -1082,9 +1105,28 @@ $('setBtn').onclick = () => { fillMics(); open('setSheet'); };
 $('setDone').onclick = () => close('setSheet');
 document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => { if (e.target === s) s.classList.remove('open'); }));
 
+function fsEff(){ return S.far ? Math.round(S.fs * 2) : S.fs; }
+// Dónde va el texto: junto a la cámara (y se acomoda si volteas el cel), en medio o abajo
+function orientSide(){
+  const a = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle
+          : (typeof window.orientation === 'number' ? (window.orientation + 360) % 360 : 0);
+  if (innerWidth <= innerHeight) return 'portrait';
+  if (a === 90) return 'left';               // cel girado: la cámara queda a la izquierda
+  if (a === 270) return 'right';             // girado al otro lado: a la derecha
+  return 'portrait';                         // compu / tablet normal: arriba
+}
+function applyPlace(){
+  const b = document.body, side = orientSide();
+  b.classList.remove('pos-camera','pos-center','pos-bottom','land-left','land-right','far');
+  b.classList.add('pos-' + S.place);
+  if (S.place === 'camera' && side !== 'portrait') b.classList.add('land-' + side);
+  if (S.far) b.classList.add('far');
+  $('farBtn').classList.toggle('on', S.far);
+}
 function applyLook(){
   const r = document.documentElement.style;
-  r.setProperty('--fs', S.fs + 'px'); r.setProperty('--lines', S.lines);
+  r.setProperty('--fs', fsEff() + 'px'); r.setProperty('--lines', S.lines);
+  applyPlace();
   applyMirror();
   prompter.classList.toggle('mirror-text', S.textFlip);
   if (pipWin) pipWin.document.documentElement.style.cssText = r.cssText;
@@ -1092,6 +1134,22 @@ function applyLook(){
 }
 const fsI = $('fs'), lnI = $('lines'), langI = $('lang');
 fsI.value = S.fs; lnI.value = S.lines; langI.value = S.lang;
+$('place').value = S.place; $('farOn').checked = S.far;
+$('place').onchange = e => { S.place = e.target.value; store.set('place', S.place); applyLook(); };
+$('farOn').onchange = e => { S.far = e.target.checked; store.set('far', S.far); applyLook(); };
+$('farBtn').onclick = e => {
+  e.stopPropagation();
+  S.far = !S.far; store.set('far', S.far); $('farOn').checked = S.far;
+  // al alejarte, en medio se lee mejor; al regresar, vuelve junto a la cámara
+  if (S.far && S.place === 'camera'){ S.place = 'center'; $('place').value = 'center'; }
+  else if (!S.far && S.place === 'center' && store.get('place', 'camera') === 'camera'){ S.place = 'camera'; $('place').value = 'camera'; }
+  applyLook();
+  toast(S.far ? 'Letra grande para grabar de lejos' : 'Letra normal');
+};
+const onOrient = () => { applyPlace(); setTimeout(() => paint(true), 120); };
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onOrient);
+window.addEventListener('orientationchange', onOrient);
+window.addEventListener('resize', () => applyPlace());
 $('camOn').checked = S.camOn; $('camFlip').checked = S.camFlip; $('textFlip').checked = S.textFlip;
 fsI.oninput = () => { S.fs = +fsI.value; store.set('fs', S.fs); applyLook(); };
 lnI.oninput = () => { S.lines = +lnI.value; store.set('lines', S.lines); applyLook(); };
