@@ -238,6 +238,7 @@ body.pip{background:#000}
     <div class="actions">
       <button class="pill" id="exBtn">Ejemplo con pausas</button>
       <button class="pill" id="salesBtn">Plantilla de venta (StoryBrand)</button>
+      <button class="pill hide" id="sendApkBtn">📲 Mandar al cuadrito flotante</button>
       <button class="pill" id="clearBtn">Borrar</button>
       <button class="pill primary" id="saveBtn">Listo</button>
     </div>
@@ -280,6 +281,7 @@ body.pip{background:#000}
     <p class="hint">Tip: toca cualquier palabra del texto para saltar ahí. Desliza el texto arriba/abajo para moverte a mano. En Windows, “Ventana flotante” deja el texto siempre encima; arrástralo justo debajo de tu webcam.</p>
     <div class="row installRow hide"><label>Tenerla como app en tu pantalla</label><button class="pill installBtn" id="installBtn2">📲 Instalar</button></div>
     <p class="hint installHint hide" id="installHint"></p>
+    <p class="hint androidOnly">📲 <b>Cuadrito flotante para Android</b>: flota encima de TikTok, Instagram o Facebook y no sale en tu video. <a href="descargas/PrompterVoz.apk" style="color:#ffd34d">Descargar la app (APK)</a> · al instalar, Android te pedirá permitir “instalar apps de origen desconocido”.</p>
     <div class="actions"><button class="pill primary" id="setDone">Listo</button></div>
   </div>
 </div>
@@ -1110,6 +1112,11 @@ $('salesBtn').onclick = () => { $('scriptInput').value = SALES_SCRIPT; };
 $('exBtn').onclick = () => { $('scriptInput').value = DEFAULT_SCRIPT; };
 $('cueGo').onclick = cueGo;
 $('cueRedo').onclick = cueRedo;
+if (IS_ANDROID && navigator.share){ $('sendApkBtn').classList.remove('hide'); }
+$('sendApkBtn').onclick = async () => {
+  const t = $('scriptInput').value.trim() || S.script;
+  try { await navigator.share({ text: t }); toast('Elige “Prompter Voz” en la lista'); } catch(e){}
+};
 $('clearBtn').onclick = () => { $('scriptInput').value = ''; $('scriptInput').focus(); };
 $('vidSave').onclick = downloadVideo;
 $('vidShare').onclick = shareVideo;

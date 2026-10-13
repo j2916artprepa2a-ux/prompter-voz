@@ -39,6 +39,14 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 - ⌨️ Atajos en la compu: `Espacio` pausa/sigue · `↑ ↓ ← →` mueven · `R` reinicia.
 - 📲 Se instala como app (PWA) y recuerda tu último guion.
 
+## 📲 Cuadrito flotante (app Android)
+
+App nativa que pone tu guion **flotando encima de TikTok, Instagram, Facebook o la cámara**. Esas apps graban tu cámara, no tu pantalla, así que el cuadrito **no sale en tu video**.
+
+- Arrástralo a donde quieras (✥), cambia tamaño (A− A+), modo voz 🎙 o automático ⏱.
+- Recibe el guion desde la app web: ✏️ → “📲 Mandar al cuadrito flotante”.
+- **[Descargar PrompterVoz.apk](https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/PrompterVoz.apk)** (se compila solo con GitHub Actions; código en `android/`).
+
 ## Instalar
 
 ### Android
