@@ -85,6 +85,9 @@ body.land-right #prompter{left:auto;right:0;transform:translateY(-50%);border-ra
 body.land-left #flipBtn{right:10px} body.land-right #flipBtn{right:auto;left:10px}
 /* letra grande: cuadro más ancho */
 body.far #prompter{width:min(96vw,1100px)}
+body.pos-free #prompter{border-radius:22px;padding:12px 18px 8px;bottom:auto}
+body.dragging #prompter{transition:none;box-shadow:0 0 0 2px #ffd34d,0 16px 40px rgba(0,0,0,.5)}
+#moveBtn{cursor:grab;touch-action:none}
 body.tilted #prompter{border-radius:22px;padding:12px 18px 8px;bottom:auto;right:auto;transition:none}
 body.far.land-left #prompter,body.far.land-right #prompter{width:min(70vw,900px)}
 @media (max-width:600px){
@@ -195,6 +198,7 @@ body.pip{background:#000}
   <div id="pfoot">
     <div id="progress"><i></i></div>
     <span id="status">Toca el micrófono</span>
+    <button class="mini" id="moveBtn" aria-label="Mover el cuadro"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
     <button class="mini" id="farBtn" aria-label="Letra grande"><svg viewBox="0 0 24 24"><path d="M3 19L9 5l6 14M5.5 14h7"/><path d="M17 9v8M14.5 11.5L17 9l2.5 2.5"/></svg></button>
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -251,6 +255,7 @@ body.pip{background:#000}
         <option value="camera">Junto a la cámara</option>
         <option value="center">En medio</option>
         <option value="bottom">Abajo</option>
+        <option value="free">Donde yo lo deje (arrastrando ✥)</option>
       </select></div>
     <div class="row"><label for="farOn">Letra grande (para grabar de lejos)</label><input type="checkbox" class="switch" id="farOn"></div>
     <div class="row"><label for="lang">Idioma de tu voz</label>
@@ -344,6 +349,7 @@ const S = {
   fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
   lines: store.get('lines', 3),
   place: store.get('place', 'camera'),
+  free: store.get('free', { x: .5, y: .3 }),
   far: store.get('far', false),
   lang: store.get('lang', 'es-MX'),
   engine: store.get('engine', /Android/i.test(navigator.userAgent) ? 'local' : 'google'),
@@ -1152,7 +1158,7 @@ function orientSide(){
 }
 function applyPlace(){
   const b = document.body, side = orientSide();
-  b.classList.remove('pos-camera','pos-center','pos-bottom','land-left','land-right','far');
+  b.classList.remove('pos-camera','pos-center','pos-bottom','pos-free','land-left','land-right','far');
   b.classList.add('pos-' + S.place);
   if (S.place === 'camera' && side !== 'portrait') b.classList.add('land-' + side);
   if (S.far) b.classList.add('far');
@@ -1171,12 +1177,56 @@ function onMotion(e){
   if (t !== tilt){ tilt = t; placeTilt(); }
 }
 window.addEventListener('devicemotion', onMotion);
+/* ---------- mover el cuadro a donde quieras (botón ✥) ---------- */
+function placeFree(){
+  const st = prompter.style, r = prompter.getBoundingClientRect();
+  const w = r.width, h = r.height;
+  const cx = Math.min(Math.max(S.free.x * innerWidth, w / 2 + 4), innerWidth - w / 2 - 4);
+  const cy = Math.min(Math.max(S.free.y * innerHeight, h / 2 + 4), innerHeight - h / 2 - 4);
+  st.left = cx + 'px'; st.top = cy + 'px'; st.transform = 'translate(-50%,-50%)';
+}
+(() => {
+  const mb = $('moveBtn'); let drag = null, lastTap = 0;
+  mb.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTap < 350){        // doble toque: regresa junto a la cámara
+      lastTap = 0; S.place = 'camera'; store.set('place', 'camera'); $('place').value = 'camera';
+      applyLook(); toast('El texto regresó junto a la cámara'); return;
+    }
+    lastTap = now;
+    const r = prompter.getBoundingClientRect();
+    drag = { dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2), moved: false };
+    try { mb.setPointerCapture(e.pointerId); } catch(_){}
+  });
+  mb.addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (!drag.moved){
+      drag.moved = true;
+      if (S.place !== 'free'){ S.place = 'free'; $('place').value = 'free'; applyPlace(); }
+      document.body.classList.add('dragging');
+    }
+    S.free = { x: (e.clientX - drag.dx) / innerWidth, y: (e.clientY - drag.dy) / innerHeight };
+    placeFree();
+  });
+  const end = () => {
+    if (!drag) return;
+    if (drag.moved){ store.set('place', 'free'); store.set('free', S.free); requestAnimationFrame(() => paint(true)); }
+    else toast('Arrastra ✥ para mover el texto · doble toque para regresarlo');
+    drag = null; document.body.classList.remove('dragging');
+  };
+  mb.addEventListener('pointerup', end); mb.addEventListener('pointercancel', end);
+})();
 function placeTilt(){
   const st = prompter.style;
   const screenTurned = innerWidth > innerHeight;          // si la pantalla sí giró, ya se acomoda solo
   const on = tilt !== 0 && !screenTurned && !document.body.classList.contains('pip');
   document.body.classList.toggle('tilted', on);
-  if (!on){ st.width = st.left = st.top = st.transform = ''; requestAnimationFrame(() => paint(true)); return; }
+  if (!on){
+    st.width = st.left = st.top = st.transform = '';
+    if (S.place === 'free') placeFree();
+    requestAnimationFrame(() => paint(true)); return;
+  }
   const W = Math.round(Math.min(innerHeight * (S.far ? 0.86 : 0.62), S.far ? 1000 : 560));
   st.width = W + 'px'; st.transform = 'none'; st.left = '0px'; st.top = '0px';
   const H = prompter.offsetHeight;
