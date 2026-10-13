@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="icons/icon-192.png" width="110" alt="Prompter Voz">
+  <img src="icons/icon-192.png" width="110" alt="TexGolem">
 </p>
 
-<h1 align="center">Prompter Voz</h1>
+<h1 align="center">TexGolem</h1>
 
 <p align="center">
   <b>Teleprompter que sigue tu voz palabra por palabra, justo debajo de la cámara.</b><br>
@@ -45,7 +45,7 @@ App nativa que pone tu guion **flotando encima de TikTok, Instagram, Facebook o 
 
 - Arrástralo a donde quieras (✥), cambia tamaño (A− A+), modo voz 🎙 o automático ⏱.
 - Recibe el guion desde la app web: ✏️ → “📲 Mandar al cuadrito flotante”.
-- **[Descargar PrompterVoz.apk](https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/PrompterVoz.apk)** (se compila solo con GitHub Actions; código en `android/`).
+- **[Descargar TexGolem.apk](https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/TexGolem.apk)** (se compila solo con GitHub Actions; código en `android/`).
 
 ## Instalar
 

@@ -32,18 +32,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          cp android/app/build/outputs/apk/release/app-release.apk PrompterVoz.apk
-          ls -la PrompterVoz.apk
+          cp android/app/build/outputs/apk/release/app-release.apk TexGolem.apk
+          ls -la TexGolem.apk
           gh release delete android-latest -y --cleanup-tag || true
-          gh release create android-latest PrompterVoz.apk \
-            --title "Prompter Voz para Android (cuadrito flotante)" \
-            --notes "Descarga PrompterVoz.apk en tu Android e instálalo. Versión ${{ github.run_number }}." \
+          gh release create android-latest TexGolem.apk \
+            --title "TexGolem para Android (cuadrito flotante)" \
+            --notes "Descarga TexGolem.apk en tu Android e instálalo. Versión ${{ github.run_number }}." \
             --latest
-          # También en la página: j2916artprepa2a-ux.github.io/prompter-voz/descargas/PrompterVoz.apk
-          mkdir -p descargas && cp PrompterVoz.apk descargas/PrompterVoz.apk
+          # También en la página: j2916artprepa2a-ux.github.io/prompter-voz/descargas/TexGolem.apk
+          mkdir -p descargas && cp TexGolem.apk descargas/TexGolem.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add descargas/PrompterVoz.apk
+          git add descargas/TexGolem.apk
           git commit -m "APK Android v${{ github.run_number }} [skip ci]" || true
           git push || true
       - name: Guardar error de compilación

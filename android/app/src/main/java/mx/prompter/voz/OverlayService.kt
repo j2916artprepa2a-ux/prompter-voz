@@ -96,7 +96,7 @@ class OverlayService : Service(), RecognitionListener {
         )
         val n: Notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Prompter Voz está activo")
+            .setContentTitle("TexGolem está activo")
             .setContentText("Tu cuadrito de texto está flotando. Toca para editar el guion.")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), "Cerrar cuadrito", stop).build())

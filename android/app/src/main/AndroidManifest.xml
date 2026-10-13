@@ -18,7 +18,7 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Prompter Voz"
+        android:label="TexGolem"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
@@ -30,7 +30,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Recibir el guion desde la app web (Compartir → Prompter Voz) -->
+            <!-- Recibir el guion desde la app web (Compartir → TexGolem) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
