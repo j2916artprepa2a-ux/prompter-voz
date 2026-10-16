@@ -364,6 +364,9 @@ const S = {
 };
 
 const $ = id => document.getElementById(id);
+// Dentro de la app de Android: mismo guion y videos directo a la Galería
+const APPB = window.TexJAHCAndroid || null;
+if (APPB){ try { const t = APPB.getScript(); if (t && t.trim()) S.script = t; } catch(e){} }
 const textEl = $('text'), viewport = $('viewport'), prompter = $('prompter');
 const statusEl = $('status'), progressEl = $('progress').firstElementChild;
 
@@ -1041,8 +1044,20 @@ function saveVideo(blob, type, part){
   open('vidSheet');
 }
 let lastVideo = null;
+async function saveToGallery(file){
+  // se manda en partes a la app (que lo guarda en DCIM/TexJAHC)
+  if (!APPB.beginSave(file.name, file.type || 'video/mp4')) return false;
+  const CH = 512 * 1024;
+  for (let off = 0; off < file.size; off += CH){
+    const buf = new Uint8Array(await file.slice(off, off + CH).arrayBuffer());
+    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    if (!APPB.appendSave(btoa(bin))) return false;
+  }
+  return APPB.endSave();
+}
 function downloadVideo(){
   if (!lastVideo) return;
+  if (APPB){ saveToGallery(lastVideo).then(ok => { if (!ok) toast('No pude guardar en la Galería'); }); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(lastVideo); a.download = lastVideo.name;
   document.body.appendChild(a); a.click(); a.remove();
@@ -1123,12 +1138,12 @@ if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 function open(id){ $(id).classList.add('open'); }
 function close(id){ $(id).classList.remove('open'); }
 $('editBtn').onclick = () => { $('scriptInput').value = S.script; open('editSheet'); setTimeout(()=>$('scriptInput').focus(),50); };
-$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); else if (voskModel) getRecognizer(voskModel); };
+$('saveBtn').onclick = () => { S.script = $('scriptInput').value.trim() || DEFAULT_SCRIPT; store.set('script', S.script); if (APPB) try { APPB.setScript(S.script); } catch(e){} close('editSheet'); build(); if (listening && S.engine === 'local') startLocal(); else if (voskModel) getRecognizer(voskModel); };
 $('salesBtn').onclick = () => { $('scriptInput').value = SALES_SCRIPT; };
 $('exBtn').onclick = () => { $('scriptInput').value = DEFAULT_SCRIPT; };
 $('cueGo').onclick = cueGo;
 $('cueRedo').onclick = cueRedo;
-if (IS_ANDROID && navigator.share){ $('sendApkBtn').classList.remove('hide'); }
+if (IS_ANDROID && navigator.share && !APPB){ $('sendApkBtn').classList.remove('hide'); }
 $('sendApkBtn').onclick = async () => {
   const t = $('scriptInput').value.trim() || S.script;
   try { await navigator.share({ text: t }); toast('Elige “TexJAHC” en la lista'); } catch(e){}
@@ -1153,12 +1168,13 @@ async function doInstall(){
   installEvt = null; showInstallUI(false);
   if (r && r.outcome === 'accepted') toast('¡Listo! Ya la tienes como app en tu pantalla.');
 }
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (!isStandalone()) showInstallUI(true); });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (!isStandalone() && !APPB) showInstallUI(true); });
 window.addEventListener('appinstalled', () => { installEvt = null; showInstallUI(false); });
 ['installBtn1','installBtn2','installBtn3'].forEach(id => $(id).onclick = doInstall);
 $('installX').onclick = () => { $('installBar').classList.add('hide'); try { sessionStorage.setItem('pv2_noInstall','1'); } catch(e){} };
 // Sin botón automático (iPhone, o navegador de TikTok/WhatsApp): explicar cómo
-if (!isStandalone()){
+if (APPB){ document.querySelectorAll('.androidOnly').forEach(x => x.classList.add('hide')); }
+if (!isStandalone() && !APPB){
   const ua = navigator.userAgent, h = $('installHint');
   if (/iPhone|iPad/.test(ua)) h.textContent = 'En iPhone: abre este link en Safari → Compartir → “Agregar a pantalla de inicio”.';
   else if (/FBAN|FBAV|Instagram|TikTok|musical_ly|Bytedance|WhatsApp|; wv\)/i.test(ua)) h.textContent = 'Estás dentro de otra app (TikTok, WhatsApp…). Abre el link en Chrome: menú ⋮ → “Abrir en Chrome”, y ahí instálala.';

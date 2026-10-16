@@ -95,7 +95,11 @@ class MainActivity : Activity() {
         col.addView(label(
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
-        col.addView(pill("▶  Abrir cuadrito flotante", true) { launch() }, LinearLayout.LayoutParams(
+        col.addView(pill("🎥  Grabar video aquí (te sigue la voz)", true) {
+            prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
+            startActivity(Intent(this, RecordActivity::class.java))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        col.addView(pill("▶  Abrir cuadrito flotante (para TikTok, Insta, FB)", false) { launch() }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         errorView = TextView(this).apply {
             setTextColor(0xFFFF8A80.toInt()); textSize = 13f; setPadding(0, dp(8), 0, 0)
@@ -323,6 +327,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::a11yInfo.isInitialized) updateA11yInfo()
+        if (::script.isInitialized) {
+            val t = prefs.getString(Prefs.SCRIPT, null)
+            if (t != null && t != script.text.toString()) script.setText(t)
+        }
         if (waitingOverlay && Settings.canDrawOverlays(this)) { waitingOverlay = false; launch() }
     }
 }
