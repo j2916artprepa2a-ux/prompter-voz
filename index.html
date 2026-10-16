@@ -605,6 +605,19 @@ function onMobileData(){
   const c = navigator.connection || {};
   return c.saveData === true || c.type === 'cellular' || /^(slow-2g|2g|3g)$/.test(c.effectiveType || '');
 }
+// Descarga mostrando el porcentaje (queda en caché y luego la usa el motor sin volver a bajarla)
+async function fetchProgress(url, label, onPct){
+  const res = await fetch(url);
+  if (!res.ok || !res.body) return;
+  const total = +res.headers.get('Content-Length') || 0;
+  const rd = res.body.getReader(); let got = 0, last = -1;
+  for (;;){
+    const { done, value } = await rd.read(); if (done) break;
+    got += value.length;
+    const pct = total ? Math.floor(got * 100 / total) : 0;
+    if (pct !== last){ last = pct; onPct(total ? label + ' ' + pct + '%' : label + ' ' + (got / 1048576).toFixed(0) + ' MB'); }
+  }
+}
 function loadScript(src){ return new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = ko; document.head.appendChild(sc); }); }
 function openModel(url){
   return new Promise((ok, ko) => {
@@ -634,6 +647,7 @@ async function loadVosk(){
             if (!head.ok) { last = new Error('no existe ' + u); continue; }
           } catch(e){ /* sin internet: puede que ya esté guardado */ }
         }
+        if (!cached){ try { await fetchProgress(url, 'Bajando voz', t => setStatus(t)); } catch(e){} }
         try { return await withTimeout(openModel(url), 300000); }
         catch(e){ last = e; }
       }
@@ -975,6 +989,7 @@ function loadMerger(){
   if (!ffmpegLoading){
     ffmpegLoading = (async () => {
       if (!window.FFmpegWASM) await loadScript('lib/ffmpeg/ffmpeg.js');
+      if (!ffCached()){ try { await fetchProgress(new URL('lib/ffmpeg/ffmpeg-core.wasm', location.href).href, 'Preparando para unir clips', t => { $('mergeTxt').textContent = t; }); } catch(e){} }
       const ff = new FFmpegWASM.FFmpeg();
       await ff.load({
         coreURL: new URL('lib/ffmpeg/ffmpeg-core.js', location.href).href,
