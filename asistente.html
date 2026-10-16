@@ -220,6 +220,8 @@ $('again').onclick = generate;
 function sendToPrompter(t){
   try { localStorage.setItem('pv2_script', JSON.stringify(t)); } catch(e){}
   if (APPB) try { APPB.setScript(t); } catch(e){}
+  // Dentro de la app: regresa a la pantalla principal con el guion ya puesto.
+  if (APPB && typeof APPB.backToApp === 'function'){ try { APPB.backToApp(); return; } catch(e){} }
   location.href = './';
 }
 $('use').onclick = () => { const t = $('out').value.trim(); if (t) sendToPrompter(t); };
@@ -269,27 +271,37 @@ $('intStart').onclick = async () => {
 
 $('qSpeak').onclick = () => speak(qs[qi]);
 
-// Dictado (Chrome / Edge). En donde no exista, se contesta escribiendo.
+// Dictado: el de Chrome/Edge, o el de Android cuando se abre dentro de la app TexJAHC.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, recOn = false;
-if (!SR) $('mic').classList.add('hide');
+const NATIVE_SR = !SR && APPB && typeof APPB.listen === 'function';
+let dictStop = null;
+/** Empieza a dictar. onText(texto) mientras hablas, onDone() al terminar. */
+function dictate(onText, onDone, continuous){
+  if (NATIVE_SR){
+    window.__nativeSpeech = (t, done) => { if (t) onText(t); if (done){ window.__nativeSpeech = null; dictStop = null; onDone(); } };
+    APPB.listen();
+    dictStop = () => { try { APPB.stopListening(); } catch(e){} };
+    return;
+  }
+  const r = new SR(); r.lang = 'es-MX'; r.continuous = !!continuous; r.interimResults = true;
+  r.onresult = ev => { let t = ''; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript; onText(t); };
+  r.onend = () => { dictStop = null; onDone(); };
+  r.onerror = () => {};
+  r.start();
+  dictStop = () => { try { r.stop(); } catch(e){} };
+}
+if (!SR && !NATIVE_SR){ $('mic').classList.add('hide'); $('invMic').classList.add('hide'); }
+
 $('mic').onclick = () => {
-  if (recOn){ try { rec.stop(); } catch(e){} return; }
+  if (dictStop){ dictStop(); return; }
   try { speechSynthesis.cancel(); } catch(e){}
-  rec = new SR(); rec.lang = 'es-MX'; rec.continuous = true; rec.interimResults = true;
   const base = $('ans').value ? $('ans').value.trim() + ' ' : '';
-  rec.onresult = ev => {
-    let txt = '';
-    for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript;
-    $('ans').value = base + txt;
-  };
-  rec.onend = () => { recOn = false; $('mic').textContent = '🎙 Contestar con voz'; };
-  rec.onerror = () => {};
-  rec.start(); recOn = true; $('mic').textContent = '⏹ Ya terminé de hablar';
+  $('mic').textContent = '⏹ Ya terminé de hablar';
+  dictate(t => { $('ans').value = base + t; }, () => { $('mic').textContent = '🎙 Contestar con voz'; }, true);
 };
 
 $('check').onclick = async () => {
-  if (recOn) try { rec.stop(); } catch(e){}
+  if (dictStop) dictStop();
   const a = $('ans').value.trim();
   if (!a){ $('intStatus').textContent = 'Contesta primero (con voz o escribiendo).'; return; }
   $('check').disabled = true;
@@ -323,15 +335,16 @@ $('next').onclick = () => {
 };
 
 /* ---------- Investigar ---------- */
-let invRec = null, invOn = false;
-if (!SR) $('invMic').classList.add('hide');
 $('invMic').onclick = () => {
-  if (invOn){ try { invRec.stop(); } catch(e){} return; }
-  invRec = new SR(); invRec.lang = 'es-MX'; invRec.interimResults = true;
-  invRec.onresult = ev => { let t = ''; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript; $('invQ').value = t; };
-  invRec.onend = () => { invOn = false; $('invMic').textContent = '🎙 Preguntar con voz'; if ($('invQ').value.trim()) investigate(); };
-  invRec.onerror = () => {};
-  invRec.start(); invOn = true; $('invMic').textContent = '⏹ Listo';
+  if (dictStop){ dictStop(); return; }
+  $('invQ').value = '';
+  $('invMic').textContent = '⏹ Listo';
+  $('invStatus').textContent = 'Te escucho…';
+  dictate(t => { $('invQ').value = t; }, () => {
+    $('invMic').textContent = '🎙 Preguntar con voz';
+    $('invStatus').textContent = '';
+    if ($('invQ').value.trim()) investigate();
+  });
 };
 
 async function investigate(){
@@ -369,6 +382,8 @@ $('toPrompter').onclick = () => {
   if (!studied.length) return;
   sendToPrompter(studied.join('\n\n'));
 };
+// Abrir directo en una pestaña: asistente.html#investigar
+if (location.hash){ const t = document.querySelector('.tab[data-m="' + location.hash.slice(1) + '"]'); if (t) t.click(); }
 </script>
 </body>
 </html>

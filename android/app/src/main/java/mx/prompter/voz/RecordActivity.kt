@@ -12,6 +12,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import org.json.JSONObject
 import android.util.Base64
 import android.view.View
 import android.view.WindowInsets
@@ -33,10 +37,14 @@ import java.io.OutputStream
  */
 class RecordActivity : Activity() {
 
-    companion object { const val URL = "https://j2916artprepa2a-ux.github.io/prompter-voz/" }
+    companion object {
+        const val URL = "https://j2916artprepa2a-ux.github.io/prompter-voz/"
+        const val EXTRA_PAGE = "page"
+    }
 
     private lateinit var web: WebView
     private var pendingWebPerm: PermissionRequest? = null
+    private var listener: SpeechRecognizer? = null
     private val prefs by lazy { getSharedPreferences(Prefs.FILE, MODE_PRIVATE) }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -67,7 +75,48 @@ class RecordActivity : Activity() {
                 }
             }
         }
-        web.loadUrl(URL)
+        web.loadUrl(URL + (intent.getStringExtra(EXTRA_PAGE) ?: ""))
+    }
+
+    /** Dictado con el reconocedor de Android (el WebView no trae el de Chrome). */
+    private fun sendSpeech(text: String, done: Boolean) {
+        web.evaluateJavascript("window.__nativeSpeech && window.__nativeSpeech(${JSONObject.quote(text)}, $done)", null)
+    }
+
+    private fun startListening() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 22)
+            sendSpeech("", true)
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "Tu cel no tiene dictado por voz disponible", Toast.LENGTH_LONG).show()
+            sendSpeech("", true); return
+        }
+        listener?.destroy()
+        val r = SpeechRecognizer.createSpeechRecognizer(this)
+        listener = r
+        r.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(b: Bundle?) {
+                sendSpeech(b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: "", true)
+            }
+            override fun onPartialResults(b: Bundle?) {
+                val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: return
+                if (t.isNotBlank()) sendSpeech(t, false)
+            }
+            override fun onError(error: Int) { sendSpeech("", true) }
+            override fun onReadyForSpeech(p: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(v: Float) {}
+            override fun onBufferReceived(b: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(t: Int, p: Bundle?) {}
+        })
+        r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-MX")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        })
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -100,6 +149,7 @@ class RecordActivity : Activity() {
     }
 
     override fun onDestroy() {
+        listener?.destroy(); listener = null
         web.destroy()
         super.onDestroy()
     }
@@ -150,6 +200,11 @@ class RecordActivity : Activity() {
                 true
             } catch (e: Exception) { false }
         }
+
+        @JavascriptInterface fun listen() { runOnUiThread { startListening() } }
+        @JavascriptInterface fun stopListening() { runOnUiThread { listener?.stopListening() } }
+        /** Regresa a la pantalla principal de la app (el guion ya quedó guardado). */
+        @JavascriptInterface fun backToApp() { runOnUiThread { finish() } }
 
         @JavascriptInterface fun openFloating() {
             runOnUiThread {
