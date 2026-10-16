@@ -394,8 +394,8 @@ class OverlayService : Service(), RecognitionListener {
                     h.post {
                         voskLoading = false
                         prefs.edit().putString("lastError", "Voz integrada: " + (e.message ?: e.javaClass.simpleName)).apply()
-                        status.text = "No cargó la voz integrada; uso la de Google"
-                        if (playing && voice) startGoogle()
+                        status.text = "No cargó la voz integrada (" + (e.message ?: e.javaClass.simpleName).take(40) + ")"
+                        h.postDelayed({ if (playing && voice) startGoogle() }, 3000)
                     }
                 }
             }.start()
@@ -408,7 +408,7 @@ class OverlayService : Service(), RecognitionListener {
             val svc = org.vosk.android.SpeechService(rec, 16000f)
             svc.startListening(voskListener)
             voskService = svc
-            status.text = "Escuchando…"
+            status.text = "Escuchando… (voz integrada)"
         } catch (e: Exception) {
             status.text = "El micrófono está ocupado: usa ⏱"
         }
@@ -424,7 +424,10 @@ class OverlayService : Service(), RecognitionListener {
             status.text = "Falta permiso de micrófono: Ajustes › TexJAHC › Permisos"
             return
         }
-        if (ModelStore.ready(this)) startVosk() else startGoogle()
+        if (ModelStore.ready(this)) startVosk() else {
+            status.text = "Usando Google · descarga la voz integrada en la app"
+            startGoogle()
+        }
     }
 
     private fun startGoogle() {
@@ -506,12 +509,16 @@ class OverlayService : Service(), RecognitionListener {
                 recognizer = null
                 status.text = "Cambiando de reconocedor de voz…"
             }
-            else -> status.text = "Voz: error $error, reintentando…"
+            10 -> {   // Google dice "demasiadas solicitudes": esperamos antes de reintentar
+                status.text = if (ModelStore.ready(this)) "Google saturado; reintentando…" else "Google saturado · descarga la voz integrada en la app"
+                restartSoon(5000L); return
+            }
+            else -> status.text = "Voz Google: error $error, reintentando…"
         }
         if (errors >= 6 && error == SpeechRecognizer.ERROR_AUDIO) {
             status.text = "El micrófono lo ocupa otra app: usa ⏱"
         }
-        restartSoon(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 700L else 250L)
+        restartSoon(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1200L else 600L)
     }
 
     override fun onDestroy() {
