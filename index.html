@@ -43,8 +43,8 @@ body.no-camera #nocam{display:flex}
   width:min(92vw,600px);background:#000;border-radius:0 0 22px 22px;
   padding:calc(var(--top) + 10px) 18px 7px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:5;
   touch-action:none;transition:width .25s}
-#viewport{height:calc(var(--fs) * var(--line) * var(--lines));overflow:hidden;position:relative;
-  -webkit-mask-image:linear-gradient(#000 0,#000 78%,rgba(0,0,0,.35) 100%);mask-image:linear-gradient(#000 0,#000 78%,rgba(0,0,0,.35) 100%)}
+#viewport{height:calc(var(--fs) * var(--line) * (var(--lines) + 1));overflow:hidden;position:relative;
+  -webkit-mask-image:linear-gradient(#000 0,#000 90%,rgba(0,0,0,.6) 100%);mask-image:linear-gradient(#000 0,#000 90%,rgba(0,0,0,.6) 100%)}
 #text{font-size:var(--fs);line-height:var(--line);font-weight:500;letter-spacing:0;
   transition:transform .35s cubic-bezier(.2,.7,.2,1);will-change:transform;text-wrap:pretty}
 #text .w{color:rgba(255,255,255,.93);transition:color .2s;cursor:pointer}
@@ -251,7 +251,7 @@ body.pip{background:#000}
   <div class="card">
     <h2>Ajustes</h2>
     <div class="row"><label for="fs">Tamaño de letra</label><input type="range" id="fs" min="13" max="48" step="1"></div>
-    <div class="row"><label for="lines">Líneas visibles</label><input type="range" id="lines" min="1" max="6" step="1"></div>
+    <div class="row"><label for="lines">Líneas visibles</label><input type="range" id="lines" min="2" max="8" step="1"></div>
     <div class="row"><label for="place">Dónde va el texto</label>
       <select id="place">
         <option value="camera">Junto a la cámara</option>
@@ -350,7 +350,7 @@ const store = {
 const S = {
   script: store.get('script', DEFAULT_SCRIPT),
   fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
-  lines: store.get('lines', 4),
+  lines: Math.max(3, store.get('lines', 4)),
   place: store.get('place', 'camera'),
   free: store.get('free', { x: .5, y: .3 }),
   far: store.get('far', false),
@@ -473,7 +473,7 @@ function scrollTo(spanIdx, instant){
   if (!target) { textEl.style.transform = 'translateY(0)'; return; }
   const lh = parseFloat(getComputedStyle(textEl).fontSize) * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line'));
   // la línea actual queda en la 1a línea si sólo hay 1-2 líneas, si no en la 2a (muestra contexto anterior)
-  const keep = S.lines >= 4 ? 1 : 0;   // con 4+ líneas: 1 anterior + lo que sigue
+  const keep = 0;   // la línea actual hasta arriba: todo lo demás es lo que sigue
   let y = target.offsetTop;
   if (keep){
     // sube a la línea anterior real (respeta saltos de párrafo)
@@ -1102,7 +1102,7 @@ window.addEventListener('pointerup', () => {
   if (Math.abs(manualOffset - dragBase) > 6){
     // fija la posición en la primera palabra visible de la línea superior
     const lh = fsEff() * 1.32, top = -parseFloat(textEl.style.transform.replace(/[^\d.-]/g,'') || 0);
-    const keep = S.lines >= 4 ? 1 : 0;   // con 4+ líneas: 1 anterior + lo que sigue
+    const keep = 0;   // la línea actual hasta arriba: todo lo demás es lo que sigue
     const want = top + keep * lh;
     let k = 0; while (k < W.length - 1 && spans[W[k]].offsetTop + lh/2 < want) k++;
     pos = k; manualOffset = 0; paint();
