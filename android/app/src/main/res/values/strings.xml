@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_desc">TexJAHC usa este modo SOLO para que el cuadrito de texto pueda escuchar tu voz mientras grabas o haces un en vivo en otra app (TikTok, Instagram, Facebook o la cámara). No lee ni guarda lo que hay en tu pantalla.</string>
+    <string name="a11y_label">TexJAHC · seguir tu voz mientras grabas</string>
+</resources>

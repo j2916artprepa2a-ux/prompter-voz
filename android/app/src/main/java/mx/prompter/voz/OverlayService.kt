@@ -48,6 +48,7 @@ class OverlayService : Service(), RecognitionListener {
     companion object {
         const val ACTION_STOP = "mx.prompter.voz.STOP"
         const val ACTION_RELOAD = "mx.prompter.voz.RELOAD"
+        const val ACTION_RECREATE = "mx.prompter.voz.RECREATE"
         const val CHANNEL = "prompter"
         var running = false
     }
@@ -71,11 +72,38 @@ class OverlayService : Service(), RecognitionListener {
     private var wpm = 140
     private var recognizer: SpeechRecognizer? = null
     private var errors = 0
+    private var a11yWindow = false
+
+    // Detecta si Android le quitó el micrófono al cuadrito (otra app lo está usando)
+    private var recCb: Any? = null
+    private fun watchMic() {
+        if (Build.VERSION.SDK_INT < 29 || recCb != null) return
+        val am = getSystemService(android.media.AudioManager::class.java)
+        val cb = object : android.media.AudioManager.AudioRecordingCallback() {
+            override fun onRecordingConfigChanged(configs: MutableList<android.media.AudioRecordingConfiguration>?) {
+                if (!playing || !voice || configs == null) return
+                if (configs.any { it.isClientSilenced }) {
+                    status.text = if (a11yWindow) "Android silenció el micrófono aquí · usa ⏱"
+                                  else "Otra app usa el micrófono · activa Accesibilidad o usa ⏱"
+                } else if (configs.isNotEmpty() && voskService != null) {
+                    status.text = if (a11yWindow) "Escuchando… (accesibilidad)" else "Escuchando… (voz integrada)"
+                }
+            }
+        }
+        am.registerAudioRecordingCallback(cb, h)
+        recCb = cb
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_RECREATE && root != null) {
+            // pasar el cuadrito a ventana de accesibilidad (o regresarlo a normal)
+            setPlaying(false)
+            root?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
+            root = null
+        }
         startAsForeground()
         running = true
         try {
@@ -152,7 +180,9 @@ class OverlayService : Service(), RecognitionListener {
     // ---------- crear el cuadrito ----------
     @SuppressLint("ClickableViewAccessibility")
     private fun createOverlay() {
-        val w = getSystemService(WINDOW_SERVICE) as WindowManager
+        val a11y = AccessService.instance
+        a11yWindow = a11y != null
+        val w = (a11y ?: this).getSystemService(WINDOW_SERVICE) as WindowManager
         wm = w
         val dm = resources.displayMetrics
 
@@ -201,7 +231,7 @@ class OverlayService : Service(), RecognitionListener {
         params = WindowManager.LayoutParams(
             prefs.getInt(Prefs.WIDTH, (dm.widthPixels * 0.92).toInt()),
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            if (a11yWindow) WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY else WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -408,7 +438,8 @@ class OverlayService : Service(), RecognitionListener {
             val svc = org.vosk.android.SpeechService(rec, 16000f)
             svc.startListening(voskListener)
             voskService = svc
-            status.text = "Escuchando… (voz integrada)"
+            watchMic()
+            status.text = if (a11yWindow) "Escuchando… (accesibilidad)" else "Escuchando… (voz integrada)"
         } catch (e: Exception) {
             status.text = "El micrófono está ocupado: usa ⏱"
         }
@@ -522,6 +553,11 @@ class OverlayService : Service(), RecognitionListener {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            (recCb as? android.media.AudioManager.AudioRecordingCallback)?.let {
+                try { getSystemService(android.media.AudioManager::class.java).unregisterAudioRecordingCallback(it) } catch (_: Exception) {}
+            }
+        }
         running = false
         playing = false
         h.removeCallbacksAndMessages(null)

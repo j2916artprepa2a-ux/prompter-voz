@@ -56,6 +56,8 @@ class MainActivity : Activity() {
     private lateinit var voiceInfo: TextView
     private lateinit var voiceBtn: Button
     private var launchAfterDownload = false
+    private lateinit var a11yInfo: TextView
+    private lateinit var a11yBtn: Button
     private var waitingOverlay = false
     private var askedPerms = false
 
@@ -126,6 +128,16 @@ class MainActivity : Activity() {
         voiceBtn = pill("⬇  Descargar voz para seguirte mejor (≈40 MB, una vez)", false) { downloadVoice(false) }
         col.addView(voiceBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         updateVoiceInfo()
+
+        col.addView(label("🎥 Que te siga la voz mientras grabas o haces live (experimental)", 14f, true))
+        a11yInfo = label("", 13f, color = 0xCCFFFFFF.toInt())
+        col.addView(a11yInfo)
+        a11yBtn = pill("Activar en Accesibilidad", false) {
+            Toast.makeText(this, "Busca TexJAHC en la lista y actívalo", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        col.addView(a11yBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        updateA11yInfo()
         col.addView(label(
             "Si grabas dentro de TikTok o Instagram y el texto no te sigue, es porque esa app ocupa el micrófono: usa ⏱ Automático.", 12f,
             color = 0x99FFFFFF.toInt()))
@@ -204,6 +216,24 @@ class MainActivity : Activity() {
         return true
     }
 
+    private fun a11yEnabled(): Boolean {
+        if (AccessService.instance != null) return true
+        val list = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return list.contains(packageName + "/")
+    }
+
+    private fun updateA11yInfo() {
+        if (a11yEnabled()) {
+            a11yInfo.text = "✓ Modo accesibilidad activo. Abre el cuadrito, toca ▶ y empieza a grabar o tu live. " +
+                "Si abajo dice “Android silenció el micrófono”, tu cel no lo permite: usa ⏱ Automático."
+            a11yBtn.text = "Ajustes de Accesibilidad"
+        } else {
+            a11yInfo.text = "Android solo deja escuchar mientras otra app graba a las apps de Accesibilidad. " +
+                "Actívalo: Ajustes › Accesibilidad › Apps instaladas (o Servicios) › TexJAHC › Activar."
+            a11yBtn.text = "Activar en Accesibilidad"
+        }
+    }
+
     private fun updateVoiceInfo() {
         if (ModelStore.ready(this)) {
             voiceInfo.text = "✓ Voz integrada lista: te sigue palabra por palabra, sin internet."
@@ -242,7 +272,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Primero descargo la voz (una sola vez)…", Toast.LENGTH_SHORT).show()
             return
         }
-        if (!Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this) && AccessService.instance == null) {
             waitingOverlay = true
             Toast.makeText(this, "Activa “Mostrar sobre otras apps” para TexJAHC y regresa", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -283,6 +313,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (::a11yInfo.isInitialized) updateA11yInfo()
         if (waitingOverlay && Settings.canDrawOverlays(this)) { waitingOverlay = false; launch() }
     }
 }
