@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
+import android.app.AlertDialog
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -110,6 +111,9 @@ class MainActivity : Activity() {
             text = prefs.getString("lastError", "").orEmpty().let { if (it.isEmpty()) "" else "⚠️ $it" }
         }
         col.addView(errorView)
+
+        col.addView(pill("🎟  Ficha de mi negocio y rifas", false) { editBusinessProfile() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
         col.addView(label("Tu guion  ·  [entre corchetes] = indicaciones que no se dicen", 14f, true))
         script = EditText(this).apply {
@@ -279,6 +283,47 @@ class MainActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    /** Ficha privada local: no se envía al chat ni al servidor. */
+    private fun editBusinessProfile() {
+        val fields = listOf(
+            "businessName" to "Nombre del negocio",
+            "rafflePrice" to "Precio de la rifa",
+            "raffleDate" to "Fecha de la rifa",
+            "paymentMethods" to "Métodos de pago",
+            "winnerRules" to "Reglas para elegir al ganador",
+            "faq" to "Preguntas frecuentes y respuestas",
+            "businessNotes" to "Información adicional"
+        )
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+        }
+        val edits = mutableMapOf<String, EditText>()
+        for ((key, title) in fields) {
+            layout.addView(TextView(this).apply { text = title; setTextColor(Color.BLACK); textSize = 15f })
+            val edit = EditText(this).apply {
+                setText(prefs.getString("business_$key", ""))
+                textSize = 15f
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                minLines = if (key == "faq" || key == "winnerRules") 3 else 1
+                maxLines = 6
+            }
+            edits[key] = edit
+            layout.addView(edit)
+        }
+        val sc = ScrollView(this).apply { addView(layout) }
+        AlertDialog.Builder(this)
+            .setTitle("Ficha de negocio · TexJAHC")
+            .setView(sc)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar") { _, _ ->
+                prefs.edit().apply {
+                    edits.forEach { (key, edit) -> putString("business_$key", edit.text.toString().trim()) }
+                }.apply()
+                Toast.makeText(this, "Ficha guardada en este teléfono", Toast.LENGTH_SHORT).show()
+            }.show()
     }
 
     private fun launch() {

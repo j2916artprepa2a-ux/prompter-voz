@@ -64,6 +64,11 @@ class OverlayService : Service(), RecognitionListener {
     private lateinit var status: TextView
     private lateinit var playBtn: TextView
     private lateinit var modeBtn: TextView
+    private var infoPanel: LinearLayout? = null
+    private var infoText: TextView? = null
+    private var infoFontSp = 22f
+    private var lastCommand = ""
+    private var lastCommandAt = 0L
 
     private var follower = Follower("")
     private var fontSp = 22f
@@ -213,6 +218,7 @@ class OverlayService : Service(), RecognitionListener {
         val move = btn("✥") {}
         modeBtn = btn("🎙") { toggleMode() }
         playBtn = btn("▶") { togglePlay() }
+        val info = btn("ⓘ") { showBusinessInfo("resumen") }
         val restart = btn("↺") { follower.pos = 0; render(true) }
         val smaller = btn("A−") { setFont(fontSp - 2f) }
         val bigger = btn("A+") { setFont(fontSp + 2f) }
@@ -225,8 +231,25 @@ class OverlayService : Service(), RecognitionListener {
         }
         row.addView(move)
         row.addView(status, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        listOf(modeBtn, playBtn, restart, smaller, bigger, close).forEach { row.addView(it) }
+        listOf(modeBtn, playBtn, info, restart, smaller, bigger, close).forEach { row.addView(it) }
         box.addView(row)
+        // El panel se muestra debajo del guion y nunca altera follower.pos ni scrollY.
+        infoPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply {
+                setColor(0xFF202025.toInt()); cornerRadius = dp(12).toFloat()
+            }
+        }
+        infoText = TextView(this).apply { setTextColor(Color.WHITE); textSize = infoFontSp }
+        infoPanel!!.addView(infoText)
+        val controls = LinearLayout(this).apply { gravity = Gravity.END }
+        controls.addView(btn("A−") { infoFontSp = (infoFontSp - 2f).coerceAtLeast(14f); infoText?.textSize = infoFontSp })
+        controls.addView(btn("A+") { infoFontSp = (infoFontSp + 2f).coerceAtMost(48f); infoText?.textSize = infoFontSp })
+        controls.addView(btn("↩ Guion") { hideBusinessInfo() })
+        infoPanel!!.addView(controls)
+        box.addView(infoPanel)
 
         params = WindowManager.LayoutParams(
             prefs.getInt(Prefs.WIDTH, (dm.widthPixels * 0.92).toInt()),
@@ -270,6 +293,49 @@ class OverlayService : Service(), RecognitionListener {
         w.addView(box, params)
         root = box
         reload()
+    }
+
+    private fun hideBusinessInfo() {
+        infoPanel?.visibility = View.GONE
+        root?.let { wm?.updateViewLayout(it, params) }
+    }
+
+    private fun showBusinessInfo(which: String) {
+        val all = listOf(
+            "businessName" to "Negocio", "rafflePrice" to "Precio", "raffleDate" to "Fecha",
+            "paymentMethods" to "Métodos de pago", "winnerRules" to "Reglas del ganador",
+            "faq" to "Preguntas frecuentes", "businessNotes" to "Información adicional"
+        )
+        val selected = when (which) {
+            "precio" -> all.filter { it.first == "rafflePrice" }
+            "fecha" -> all.filter { it.first == "raffleDate" }
+            else -> all
+        }
+        infoText?.text = selected.mapNotNull { (key, label) ->
+            prefs.getString("business_$key", "")?.takeIf { it.isNotBlank() }?.let { "$label: $it" }
+        }.joinToString("\n\n").ifBlank { "Sin información guardada. Abre TexJAHC y edita la ficha de negocio." }
+        infoPanel?.visibility = View.VISIBLE
+        root?.let { wm?.updateViewLayout(it, params) }
+    }
+
+    private fun processVoiceCommand(raw: String): Boolean {
+        val normalized = java.text.Normalizer.normalize(raw.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("[\\u0300-\\u036f]"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+        val match = Regex("(?:texjahc|tex jahc|tex yac|tex yak) (pausa|sigue|atras|mas grande|regresa|precio|fecha)").find(normalized) ?: return false
+        val cmd = match.groupValues[1]
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cmd == lastCommand && now - lastCommandAt < 1800L) return true
+        lastCommand = cmd; lastCommandAt = now
+        when (cmd) {
+            "pausa" -> setPlaying(false)
+            "sigue" -> if (!playing) setPlaying(true)
+            "atras" -> { follower.pos = (follower.pos - 8).coerceAtLeast(0); render(true) }
+            "mas grande" -> setFont(fontSp + 2f)
+            "regresa" -> hideBusinessInfo()
+            "precio", "fecha" -> showBusinessInfo(cmd)
+        }
+        return true
     }
 
     private fun reload() {
@@ -387,6 +453,7 @@ class OverlayService : Service(), RecognitionListener {
         }
         val arr = org.json.JSONArray()
         set.forEach { arr.put(it) }
+        listOf("texjahc", "tex", "jahc", "pausa", "sigue", "atras", "mas", "grande", "regresa", "precio", "fecha").forEach { arr.put(it) }
         arr.put("[unk]")
         return arr.toString()
     }
@@ -503,6 +570,7 @@ class OverlayService : Service(), RecognitionListener {
         if (t.isBlank()) return
         errors = 0
         status.text = "🎙 " + t.trim().split(Regex("\\s+")).takeLast(2).joinToString(" ")
+        if (processVoiceCommand(t)) return
         if (follower.follow(t)) render(false)
     }
 
