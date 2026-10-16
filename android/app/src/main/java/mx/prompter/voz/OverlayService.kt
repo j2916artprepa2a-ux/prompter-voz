@@ -78,7 +78,14 @@ class OverlayService : Service(), RecognitionListener {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         startAsForeground()
         running = true
-        if (root == null) createOverlay() else reload()
+        try {
+            if (root == null) createOverlay() else reload()
+            prefs.edit().putString("lastError", "").putLong("shownAt", System.currentTimeMillis()).apply()
+        } catch (e: Exception) {
+            logError("Cuadrito: " + e.javaClass.simpleName + " " + (e.message ?: ""))
+            android.widget.Toast.makeText(this, "No pude mostrar el cuadrito: " + (e.message ?: e.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
+            stopSelf()
+        }
         return START_NOT_STICKY
     }
 
@@ -115,8 +122,19 @@ class OverlayService : Service(), RecognitionListener {
                 else -> startForeground(1, n)
             }
         } catch (e: Exception) {
-            startForeground(1, n)
+            // Si Android no deja usar el micrófono desde aquí, igual mostramos el cuadrito (modo ⏱ o voz al volver)
+            logError("FGS mic: " + e.javaClass.simpleName + " " + (e.message ?: ""))
+            try {
+                if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                else startForeground(1, n)
+            } catch (e2: Exception) {
+                logError("FGS: " + e2.javaClass.simpleName + " " + (e2.message ?: ""))
+            }
         }
+    }
+
+    private fun logError(msg: String) {
+        prefs.edit().putString("lastError", msg.take(300)).apply()
     }
 
     private fun dp(v: Int): Int =

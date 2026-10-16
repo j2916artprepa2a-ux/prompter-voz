@@ -52,6 +52,7 @@ class MainActivity : Activity() {
     private lateinit var modeAuto: Button
     private lateinit var wpmLabel: TextView
     private lateinit var fontLabel: TextView
+    private lateinit var errorView: TextView
     private var waitingOverlay = false
     private var askedPerms = false
 
@@ -89,6 +90,13 @@ class MainActivity : Activity() {
         col.addView(label(
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
+        col.addView(pill("▶  Abrir cuadrito flotante", true) { launch() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        errorView = TextView(this).apply {
+            setTextColor(0xFFFF8A80.toInt()); textSize = 13f; setPadding(0, dp(8), 0, 0)
+            text = prefs.getString("lastError", "").orEmpty().let { if (it.isEmpty()) "" else "⚠️ $it" }
+        }
+        col.addView(errorView)
 
         col.addView(label("Tu guion  ·  [entre corchetes] = indicaciones que no se dicen", 14f, true))
         script = EditText(this).apply {
@@ -206,9 +214,22 @@ class MainActivity : Activity() {
             return
         }
         val i = Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_RELOAD)
-        startForegroundService(i)
-        Toast.makeText(this, "Listo: abre TikTok, Instagram o tu cámara", Toast.LENGTH_SHORT).show()
-        moveTaskToBack(true)
+        try { startForegroundService(i) } catch (e: Exception) {
+            prefs.edit().putString("lastError", "Inicio: " + e.javaClass.simpleName + " " + (e.message ?: "")).apply()
+        }
+        // Esperamos a que aparezca antes de salir (si salimos al instante, Android bloquea el micrófono)
+        window.decorView.postDelayed({
+            val err = prefs.getString("lastError", "").orEmpty()
+            if (err.isNotEmpty()) {
+                errorView.text = "⚠️ $err"
+                Toast.makeText(this, "Algo falló, revisa el mensaje rojo", Toast.LENGTH_LONG).show()
+            } else if (OverlayService.running) {
+                Toast.makeText(this, "Listo ✓ Ahora abre TikTok, Instagram o tu cámara", Toast.LENGTH_LONG).show()
+                moveTaskToBack(true)
+            } else {
+                errorView.text = "⚠️ El cuadrito no apareció. Revisa que TexJAHC tenga permiso de “Mostrar sobre otras apps” (y en Xiaomi/Redmi también “Mostrar ventanas emergentes”)."
+            }
+        }, 1500)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
