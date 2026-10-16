@@ -349,10 +349,23 @@ class OverlayService : Service(), RecognitionListener {
             status.text = "Falta permiso de micrófono (abre la app)"
             return
         }
-        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(this).also {
+        val r = recognizer ?: createRecognizer().also {
             it.setRecognitionListener(this); recognizer = it
         }
         try { r.startListening(recIntent) } catch (_: Exception) { restartSoon(600) }
+    }
+
+    /** Usa el reconocedor de Google si está instalado (algunos celulares traen otro que no funciona bien). */
+    private fun createRecognizer(): SpeechRecognizer {
+        val google = android.content.ComponentName(
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
+        )
+        val hasGoogle = try { packageManager.getPackageInfo(google.packageName, 0); true } catch (_: Exception) { false }
+        if (hasGoogle && prefs.getBoolean("useGoogle", true)) {
+            try { return SpeechRecognizer.createSpeechRecognizer(this, google) } catch (_: Exception) {}
+        }
+        return SpeechRecognizer.createSpeechRecognizer(this)
     }
 
     private fun restartSoon(ms: Long) {
@@ -382,9 +395,25 @@ class OverlayService : Service(), RecognitionListener {
         if (!playing) return
         errors++
         when (error) {
-            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> { status.text = "Falta permiso de micrófono"; setPlaying(false); return }
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                status.text = "Falta permiso de micrófono: Ajustes › TexJAHC › Permisos"; setPlaying(false); return
+            }
             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> status.text = "Sin internet para la voz"
-            SpeechRecognizer.ERROR_AUDIO -> status.text = "Otra app está usando el micrófono"
+            SpeechRecognizer.ERROR_AUDIO -> status.text = "Otra app está usando el micrófono: usa ⏱"
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> status.text = "Escuchando… (habla)"
+            SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER -> {
+                // reconocedor trabado: lo recreamos
+                try { recognizer?.destroy() } catch (_: Exception) {}
+                recognizer = null
+                status.text = "Reiniciando voz…"
+            }
+            12, 13 -> {   // idioma no disponible en este reconocedor: probamos el otro
+                prefs.edit().putBoolean("useGoogle", !prefs.getBoolean("useGoogle", true)).apply()
+                try { recognizer?.destroy() } catch (_: Exception) {}
+                recognizer = null
+                status.text = "Cambiando de reconocedor de voz…"
+            }
+            else -> status.text = "Voz: error $error, reintentando…"
         }
         if (errors >= 6 && error == SpeechRecognizer.ERROR_AUDIO) {
             status.text = "El micrófono lo ocupa otra app: usa ⏱"
