@@ -53,6 +53,9 @@ class MainActivity : Activity() {
     private lateinit var wpmLabel: TextView
     private lateinit var fontLabel: TextView
     private lateinit var errorView: TextView
+    private lateinit var voiceInfo: TextView
+    private lateinit var voiceBtn: Button
+    private var launchAfterDownload = false
     private var waitingOverlay = false
     private var askedPerms = false
 
@@ -118,6 +121,11 @@ class MainActivity : Activity() {
         modes.addView(modeAuto, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         col.addView(modes)
         setVoice(prefs.getBoolean(Prefs.VOICE, true))
+        voiceInfo = label("", 13f, color = 0xCCFFFFFF.toInt())
+        col.addView(voiceInfo)
+        voiceBtn = pill("⬇  Descargar voz para seguirte mejor (≈40 MB, una vez)", false) { downloadVoice(false) }
+        col.addView(voiceBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        updateVoiceInfo()
         col.addView(label(
             "Si grabas dentro de TikTok o Instagram y el texto no te sigue, es porque esa app ocupa el micrófono: usa ⏱ Automático.", 12f,
             color = 0x99FFFFFF.toInt()))
@@ -196,8 +204,44 @@ class MainActivity : Activity() {
         return true
     }
 
+    private fun updateVoiceInfo() {
+        if (ModelStore.ready(this)) {
+            voiceInfo.text = "✓ Voz integrada lista: te sigue palabra por palabra, sin internet."
+            voiceBtn.visibility = android.view.View.GONE
+        } else if (!ModelStore.downloading) {
+            voiceInfo.text = "Para que 🎙 te siga palabra por palabra, descarga la voz integrada (mejor con WiFi)."
+            voiceBtn.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    private fun downloadVoice(thenLaunch: Boolean) {
+        if (ModelStore.downloading) return
+        launchAfterDownload = thenLaunch
+        voiceBtn.isEnabled = false
+        voiceInfo.text = "Descargando voz… 0%"
+        Thread {
+            val err = ModelStore.download(applicationContext) { p -> runOnUiThread { voiceInfo.text = "Descargando voz… $p%" } }
+            runOnUiThread {
+                voiceBtn.isEnabled = true
+                if (err != null) {
+                    voiceInfo.text = "⚠️ No se pudo descargar la voz: $err. Revisa tu internet e intenta otra vez."
+                } else {
+                    updateVoiceInfo()
+                    Toast.makeText(this, "Voz lista ✓", Toast.LENGTH_SHORT).show()
+                    if (launchAfterDownload) launch()
+                }
+            }
+        }.start()
+    }
+
     private fun launch() {
         prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
+        // En modo voz, primero baja la voz integrada (una sola vez)
+        if (prefs.getBoolean(Prefs.VOICE, true) && !ModelStore.ready(this)) {
+            if (!ModelStore.downloading) downloadVoice(true)
+            Toast.makeText(this, "Primero descargo la voz (una sola vez)…", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!Settings.canDrawOverlays(this)) {
             waitingOverlay = true
             Toast.makeText(this, "Activa “Mostrar sobre otras apps” para TexJAHC y regresa", Toast.LENGTH_LONG).show()

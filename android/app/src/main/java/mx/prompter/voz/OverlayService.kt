@@ -315,6 +315,7 @@ class OverlayService : Service(), RecognitionListener {
             if (voice) startListening() else h.postDelayed(tick, 60000L / wpm)
         } else {
             try { recognizer?.cancel() } catch (_: Exception) {}
+            stopVosk()
             status.text = "En pausa"
         }
     }
@@ -340,7 +341,93 @@ class OverlayService : Service(), RecognitionListener {
         }
     }
 
+    // ---------- voz integrada (Vosk): la misma que la app web, no depende de Google ----------
+    private var voskModel: org.vosk.Model? = null
+    private var voskService: org.vosk.android.SpeechService? = null
+    private var voskLoading = false
+    private var finalBuf = ""
+
+    private fun grammarJson(): String {
+        val set = LinkedHashSet<String>()
+        val inDir = follower.directions
+        Regex("\\S+").findAll(follower.display).forEach { m ->
+            if (inDir.any { m.range.first >= it.first && m.range.first <= it.last }) return@forEach
+            val w = m.value.lowercase().replace(Regex("[^a-z0-9áéíóúüñ]"), "")
+            if (w.isNotEmpty()) set.add(w)
+        }
+        val arr = org.json.JSONArray()
+        set.forEach { arr.put(it) }
+        arr.put("[unk]")
+        return arr.toString()
+    }
+
+    private val voskListener = object : org.vosk.android.RecognitionListener {
+        override fun onPartialResult(hypothesis: String?) {
+            val t = try { org.json.JSONObject(hypothesis ?: "{}").optString("partial") } catch (_: Exception) { "" }
+            if (t.isNotBlank()) heardText((finalBuf + " " + t).trim())
+        }
+        override fun onResult(hypothesis: String?) {
+            val t = try { org.json.JSONObject(hypothesis ?: "{}").optString("text") } catch (_: Exception) { "" }
+            if (t.isNotBlank()) {
+                finalBuf = (finalBuf + " " + t).trim().split(Regex("\\s+")).takeLast(12).joinToString(" ")
+                heardText(finalBuf)
+            }
+        }
+        override fun onFinalResult(hypothesis: String?) = onResult(hypothesis)
+        override fun onError(exception: Exception?) {
+            status.text = "Voz: " + (exception?.message ?: "error") + " · usa ⏱"
+        }
+        override fun onTimeout() {}
+    }
+
+    private fun startVosk() {
+        val model = voskModel
+        if (model == null) {
+            if (voskLoading) return
+            voskLoading = true
+            status.text = "Preparando voz…"
+            Thread {
+                try {
+                    val m = org.vosk.Model(ModelStore.dir(this).absolutePath)
+                    h.post { voskModel = m; voskLoading = false; if (playing && voice) startVosk() }
+                } catch (e: Throwable) {
+                    h.post {
+                        voskLoading = false
+                        prefs.edit().putString("lastError", "Voz integrada: " + (e.message ?: e.javaClass.simpleName)).apply()
+                        status.text = "No cargó la voz integrada; uso la de Google"
+                        if (playing && voice) startGoogle()
+                    }
+                }
+            }.start()
+            return
+        }
+        try {
+            stopVosk()
+            finalBuf = ""
+            val rec = org.vosk.Recognizer(model, 16000f, grammarJson())
+            val svc = org.vosk.android.SpeechService(rec, 16000f)
+            svc.startListening(voskListener)
+            voskService = svc
+            status.text = "Escuchando…"
+        } catch (e: Exception) {
+            status.text = "El micrófono está ocupado: usa ⏱"
+        }
+    }
+
+    private fun stopVosk() {
+        try { voskService?.stop(); voskService?.shutdown() } catch (_: Exception) {}
+        voskService = null
+    }
+
     private fun startListening() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            status.text = "Falta permiso de micrófono: Ajustes › TexJAHC › Permisos"
+            return
+        }
+        if (ModelStore.ready(this)) startVosk() else startGoogle()
+    }
+
+    private fun startGoogle() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status.text = "Sin voz de Google: usa ⏱ (automático)"
             return
@@ -375,6 +462,10 @@ class OverlayService : Service(), RecognitionListener {
 
     private fun heard(b: Bundle?) {
         val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: return
+        heardText(t)
+    }
+
+    private fun heardText(t: String) {
         if (t.isBlank()) return
         errors = 0
         status.text = "🎙 " + t.trim().split(Regex("\\s+")).takeLast(2).joinToString(" ")
@@ -404,6 +495,8 @@ class OverlayService : Service(), RecognitionListener {
             SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER -> {
                 // reconocedor trabado: lo recreamos
                 try { recognizer?.destroy() } catch (_: Exception) {}
+        stopVosk()
+        try { voskModel?.close() } catch (_: Exception) {}
                 recognizer = null
                 status.text = "Reiniciando voz…"
             }
