@@ -138,6 +138,14 @@ class MainActivity : Activity() {
         }
         col.addView(a11yBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         updateA11yInfo()
+        if (BuildConfig.FLAVOR != "live") {
+            a11yInfo.text = "Esta es la versión normal. Para intentar que te siga la voz mientras grabas en otra app, " +
+                "instala la versión Live (experimental): Play Protect la bloquea más, hay que pausarlo para instalarla."
+            a11yBtn.text = "Descargar versión Live (experimental)"
+            a11yBtn.setOnClickListener {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://j2916artprepa2a-ux.github.io/prompter-voz/descargas/TexJAHC-live.apk")))
+            }
+        }
         col.addView(label(
             "Si grabas dentro de TikTok o Instagram y el texto no te sigue, es porque esa app ocupa el micrófono: usa ⏱ Automático.", 12f,
             color = 0x99FFFFFF.toInt()))
@@ -223,6 +231,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateA11yInfo() {
+        if (BuildConfig.FLAVOR != "live") return
         if (a11yEnabled()) {
             a11yInfo.text = "✓ Modo accesibilidad activo. Abre el cuadrito, toca ▶ y empieza a grabar o tu live. " +
                 "Si abajo dice “Android silenció el micrófono”, tu cel no lo permite: usa ⏱ Automático."

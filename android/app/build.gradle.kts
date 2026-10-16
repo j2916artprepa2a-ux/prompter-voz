@@ -38,6 +38,16 @@ android {
         }
     }
 
+    buildFeatures { buildConfig = true }
+
+    // normal: sin Accesibilidad (Play Protect la deja instalar)
+    // live: con Accesibilidad, para intentar seguir la voz mientras otra app graba (experimental)
+    flavorDimensions += "tipo"
+    productFlavors {
+        create("normal") { dimension = "tipo" }
+        create("live") { dimension = "tipo" }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
