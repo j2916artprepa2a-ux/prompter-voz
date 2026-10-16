@@ -1,7 +1,7 @@
 {
-  "name": "TexGolem",
-  "short_name": "TexGolem",
-  "description": "TexGolem: tu teleprompter que sigue tu voz palabra por palabra, justo debajo de la cámara.",
+  "name": "TexJAHC",
+  "short_name": "TexJAHC",
+  "description": "TexJAHC: tu teleprompter que sigue tu voz palabra por palabra, justo debajo de la cámara.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

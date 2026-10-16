@@ -96,7 +96,7 @@ class OverlayService : Service(), RecognitionListener {
         )
         val n: Notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("TexGolem está activo")
+            .setContentTitle("TexJAHC está activo")
             .setContentText("Tu cuadrito de texto está flotando. Toca para editar el guion.")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), "Cerrar cuadrito", stop).build())
@@ -238,7 +238,7 @@ class OverlayService : Service(), RecognitionListener {
         fontSp = sp.coerceIn(12f, 60f)
         prefs.edit().putInt(Prefs.FONT, fontSp.toInt()).apply()
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp)
-        val lines = prefs.getInt(Prefs.LINES, 3)
+        val lines = prefs.getInt(Prefs.LINES, 4)
         scroll.layoutParams = scroll.layoutParams.apply { height = tv.lineHeight * lines + dp(2) }
         root?.let { wm?.updateViewLayout(it, params) }
         render(true)
@@ -264,7 +264,8 @@ class OverlayService : Service(), RecognitionListener {
         tv.post {
             val layout = tv.layout ?: return@post
             val line = layout.getLineForOffset(follower.currentOffset().coerceAtMost(follower.display.length))
-            val top = layout.getLineTop(max(0, line - 1))   // deja ver una línea anterior
+            val keep = if (prefs.getInt(Prefs.LINES, 4) >= 4) 1 else 0   // 1 línea anterior y el resto lo que sigue
+            val top = layout.getLineTop(max(0, line - keep))
             if (jump) scroll.scrollTo(0, top) else scroll.smoothScrollTo(0, top)
         }
         if (follower.pos >= follower.count && follower.count > 0) {

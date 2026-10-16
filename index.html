@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>TexGolem</title>
+<title>TexJAHC v-nueva</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -40,7 +40,7 @@ body.no-camera #nocam{display:flex}
 
 /* ---------- prompter (debajo de la cámara) ---------- */
 #prompter{position:fixed;left:50%;top:0;transform:translateX(-50%);
-  width:min(92vw,440px);background:#000;border-radius:0 0 22px 22px;
+  width:min(92vw,600px);background:#000;border-radius:0 0 22px 22px;
   padding:calc(var(--top) + 10px) 18px 7px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:5;
   touch-action:none;transition:width .25s}
 #viewport{height:calc(var(--fs) * var(--line) * var(--lines));overflow:hidden;position:relative;
@@ -91,7 +91,7 @@ body.dragging #prompter{transition:none;box-shadow:0 0 0 2px #ffd34d,0 16px 40px
 body.tilted #prompter{border-radius:22px;padding:12px 18px 8px;bottom:auto;right:auto;transition:none}
 body.far.land-left #prompter,body.far.land-right #prompter{width:min(70vw,900px)}
 @media (max-width:600px){
-  #prompter{width:min(74vw,300px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
+  #prompter{width:min(94vw,420px);padding:calc(var(--top) + 8px) 14px 5px;border-radius:0 0 18px 18px}
   #pfoot{height:16px;margin-top:3px;gap:6px}
   #status{font-size:9px;max-width:38%}
   .mini{width:18px;height:18px}.mini svg{width:11px;height:11px}
@@ -125,7 +125,7 @@ body.recording:not(.paused) #recBtn i::after{right:16px}
 body.recording #doneBtn{display:grid}
 body.recording #editBtn,body.recording #setBtn,body.recording #pipBtn{display:none}
 body.paused #recTime{background:#3a3a3e}
-#flipBtn{position:fixed;right:10px;top:calc(var(--top) + 10px);width:42px;height:42px;z-index:8}
+#flipBtn{position:fixed;right:10px;top:46%;width:42px;height:42px;z-index:8}
 #flipBtn svg{width:20px;height:20px}
 body.no-camera #flipBtn,body.pip #flipBtn{display:none}
 body.recording:not(.paused) #flipBtn{opacity:.35}
@@ -184,8 +184,9 @@ body.pip{background:#000}
 <body>
 <video id="cam" class="mirror" autoplay playsinline muted></video>
 <div id="perm"><div class="pc">
-  <div class="ico"><svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-  <h1>Activa tu cámara y micrófono</h1>
+  <img src="icons/icon-192.png" alt="TexJAHC" style="width:96px;height:96px;border-radius:24px">
+  <h1>TexJAHC</h1>
+  <p style="margin-top:-6px"><b>Activa tu cámara y micrófono</b></p>
   <p id="permMsg">Los necesito para mostrarte en cámara y para seguir tu voz palabra por palabra.</p>
   <button class="pill primary" id="permBtn">Permitir cámara y micrófono</button>
   <button class="skip" id="permSkip">Usar solo texto</button>
@@ -281,7 +282,7 @@ body.pip{background:#000}
     <p class="hint">Tip: toca cualquier palabra del texto para saltar ahí. Desliza el texto arriba/abajo para moverte a mano. En Windows, “Ventana flotante” deja el texto siempre encima; arrástralo justo debajo de tu webcam.</p>
     <div class="row installRow hide"><label>Tenerla como app en tu pantalla</label><button class="pill installBtn" id="installBtn2">📲 Instalar</button></div>
     <p class="hint installHint hide" id="installHint"></p>
-    <p class="hint androidOnly">📲 <b>Cuadrito flotante para Android</b>: flota encima de TikTok, Instagram o Facebook y no sale en tu video. <a href="descargas/TexGolem.apk" style="color:#ffd34d">Descargar la app (APK)</a> · al instalar, Android te pedirá permitir “instalar apps de origen desconocido”.</p>
+    <p class="hint androidOnly">📲 <b>Cuadrito flotante para Android</b>: flota encima de TikTok, Instagram o Facebook y no sale en tu video. <a href="descargas/TexJAHC.apk" style="color:#ffd34d">Descargar la app (APK)</a> · al instalar, Android te pedirá permitir “instalar apps de origen desconocido”.</p>
     <div class="actions"><button class="pill primary" id="setDone">Listo</button></div>
   </div>
 </div>
@@ -349,7 +350,7 @@ const store = {
 const S = {
   script: store.get('script', DEFAULT_SCRIPT),
   fs: store.get('fs', window.innerWidth < 600 ? 18 : 21),
-  lines: store.get('lines', 3),
+  lines: store.get('lines', 4),
   place: store.get('place', 'camera'),
   free: store.get('free', { x: .5, y: .3 }),
   far: store.get('far', false),
@@ -472,7 +473,7 @@ function scrollTo(spanIdx, instant){
   if (!target) { textEl.style.transform = 'translateY(0)'; return; }
   const lh = parseFloat(getComputedStyle(textEl).fontSize) * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line'));
   // la línea actual queda en la 1a línea si sólo hay 1-2 líneas, si no en la 2a (muestra contexto anterior)
-  const keep = S.lines >= 3 ? 1 : 0;
+  const keep = S.lines >= 4 ? 1 : 0;   // con 4+ líneas: 1 anterior + lo que sigue
   let y = target.offsetTop;
   if (keep){
     // sube a la línea anterior real (respeta saltos de párrafo)
@@ -1014,7 +1015,7 @@ async function mergeVideos(blobs, type){
 }
 function saveVideo(blob, type, part){
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
-  const name = 'texgolem-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + (part ? '-clip' + part : '') + '.' + ext;
+  const name = 'texjahc-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + (part ? '-clip' + part : '') + '.' + ext;
   lastVideo = new File([blob], name, { type });
   const v = $('vidPrev'); if (v.src) URL.revokeObjectURL(v.src);
   v.src = URL.createObjectURL(blob);
@@ -1086,7 +1087,7 @@ window.addEventListener('pointerup', () => {
   if (Math.abs(manualOffset - dragBase) > 6){
     // fija la posición en la primera palabra visible de la línea superior
     const lh = fsEff() * 1.32, top = -parseFloat(textEl.style.transform.replace(/[^\d.-]/g,'') || 0);
-    const keep = S.lines >= 3 ? 1 : 0;
+    const keep = S.lines >= 4 ? 1 : 0;   // con 4+ líneas: 1 anterior + lo que sigue
     const want = top + keep * lh;
     let k = 0; while (k < W.length - 1 && spans[W[k]].offsetTop + lh/2 < want) k++;
     pos = k; manualOffset = 0; paint();
@@ -1115,7 +1116,7 @@ $('cueRedo').onclick = cueRedo;
 if (IS_ANDROID && navigator.share){ $('sendApkBtn').classList.remove('hide'); }
 $('sendApkBtn').onclick = async () => {
   const t = $('scriptInput').value.trim() || S.script;
-  try { await navigator.share({ text: t }); toast('Elige “TexGolem” en la lista'); } catch(e){}
+  try { await navigator.share({ text: t }); toast('Elige “TexJAHC” en la lista'); } catch(e){}
 };
 $('clearBtn').onclick = () => { $('scriptInput').value = ''; $('scriptInput').focus(); };
 $('vidSave').onclick = downloadVideo;
@@ -1314,7 +1315,18 @@ initPerms();
 try { if (S.engine === 'local' && localStorage.getItem('pv2_voskOk')) setTimeout(() => warmVoice().then(() => setStatus('Lista')).catch(() => {}), 1200); } catch(e){}
 if (!SR) setStatus('Sin reconocimiento de voz: abre en Chrome o Edge');
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.ready.then(r => { try { (navigator.serviceWorker.controller || r.active).postMessage('hello'); } catch(_){} });
+  // Cuando hay versión nueva, se recarga sola (si no estás grabando)
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!e.data || e.data.type !== 'app-updated') return;
+    let done = false; try { done = Date.now() - (+sessionStorage.getItem('pv2_reloaded') || 0) < 15000; } catch(_){}
+    if (recSession || listening || done){ toast('Hay una versión nueva de TexJAHC: se aplica la próxima vez que la abras'); return; }
+    try { sessionStorage.setItem('pv2_reloaded', String(Date.now())); } catch(_){}
+    location.reload();
+  });
+}
 })();
 </script>
 </body>

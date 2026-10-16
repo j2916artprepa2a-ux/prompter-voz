@@ -85,7 +85,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(24), dp(20), dp(40))
         }
-        col.addView(label("TexGolem", 26f, true, Color.WHITE))
+        col.addView(label("TexJAHC", 26f, true, Color.WHITE))
         col.addView(label(
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
@@ -148,7 +148,7 @@ class MainActivity : Activity() {
             "2. Abre TikTok, Instagram, Facebook o tu cámara.\n" +
             "3. Arrastra el cuadrito con ✥ a donde quieras (cerca de la cámara se ve natural).\n" +
             "4. Toca ▶ y habla. 🎙/⏱ cambia el modo, A− A+ el tamaño, ↺ vuelve al inicio.\n" +
-            "Tip: desde la app web usa “Compartir” y elige TexGolem para mandar tu guion aquí.",
+            "Tip: desde la app web usa “Compartir” y elige TexJAHC para mandar tu guion aquí.",
             13f, color = 0x99FFFFFF.toInt()))
 
         setContentView(ScrollView(this).apply { setBackgroundColor(Color.BLACK); addView(col) })
@@ -192,7 +192,7 @@ class MainActivity : Activity() {
         prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
         if (!Settings.canDrawOverlays(this)) {
             waitingOverlay = true
-            Toast.makeText(this, "Activa “Mostrar sobre otras apps” para TexGolem y regresa", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Activa “Mostrar sobre otras apps” para TexJAHC y regresa", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
