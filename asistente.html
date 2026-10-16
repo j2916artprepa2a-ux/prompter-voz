@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>TexJAHC Asistente</title>
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#000;--panel:#121214;--ink:#f5f5f7;--dim:rgba(245,245,247,.55);--accent:#ffd34d;--accent-ink:#1a1400;--line:rgba(255,255,255,.12)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:680px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+header img{width:40px;height:40px;border-radius:10px}
+h1{font-size:20px;margin:0}
+.sub{color:var(--dim);font-size:14px;margin:2px 0 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tab{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
+input,textarea,select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#0a0a0b;color:var(--ink);font:inherit}
+textarea{min-height:90px;resize:vertical}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.btn{display:block;width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:600 16px system-ui,sans-serif;cursor:pointer}
+.btn.sec{background:#26262b;color:var(--ink)}
+.btn:disabled{opacity:.5}
+#out{white-space:pre-wrap;min-height:120px}
+.hide{display:none}
+.msg{font-size:14px;color:var(--dim);margin-top:10px}
+a{color:var(--accent)}
+details summary{cursor:pointer;color:var(--dim);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <div><h1>Asistente de guiones</h1><p class="sub">Escribe tu guion con IA y mándalo directo a TexJAHC</p></div>
+  </header>
+
+  <div class="card" id="keyCard">
+    <details id="keyBox">
+      <summary id="keySum">🔑 Tu clave de Claude (API)</summary>
+      <label for="key">Pégala aquí. Se guarda solo en este teléfono/compu.</label>
+      <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <p class="msg">La sacas en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys. Se cobra aparte según lo que uses (un guion cuesta centavos).</p>
+      <button class="btn sec" id="saveKey">Guardar clave</button>
+    </details>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-m="guion">🎬 Guion de video</button>
+    <button class="tab" data-m="live">🔴 Prep. de live</button>
+  </div>
+
+  <div class="card">
+    <label for="tema" id="temaLbl">¿De qué es el video?</label>
+    <textarea id="tema" placeholder="Ej: Rifa de un iPhone 16, boleto a $50, el sorteo es el viernes con la Lotería Nacional"></textarea>
+    <div class="row">
+      <div><label for="dur">Duración</label>
+        <select id="dur"><option value="30">30 segundos</option><option value="60" selected>1 minuto</option><option value="120">2 minutos</option><option value="300">5 minutos</option></select></div>
+      <div><label for="tono">Tono</label>
+        <select id="tono"><option>Cercano y chido</option><option>Emocionante, de vendedor</option><option>Serio y confiable</option><option>Chistoso</option></select></div>
+    </div>
+    <label for="extra">Algo más (opcional)</label>
+    <input id="extra" placeholder="Ej: menciona que soy de Puebla, cierra con 'link en mi perfil'">
+    <button class="btn" id="go">✨ Escribir guion</button>
+    <p class="msg" id="status"></p>
+  </div>
+
+  <div class="card hide" id="resCard">
+    <label for="out">Tu guion (lo puedes editar)</label>
+    <textarea id="out" rows="14"></textarea>
+    <button class="btn" id="use">▶ Usar en TexJAHC</button>
+    <button class="btn sec" id="again">↻ Otra versión</button>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const APPB = window.TexJAHCAndroid || null;
+const MODEL = 'claude-sonnet-5-5';
+let mode = 'guion';
+
+function getKey(){ try { return localStorage.getItem('pv2_claudeKey') || ''; } catch(e){ return ''; } }
+function refreshKey(){
+  const k = getKey();
+  $('key').value = k;
+  $('keySum').textContent = k ? '🔑 Clave guardada ✓ (toca para cambiarla)' : '🔑 Tu clave de Claude (API) — falta';
+  $('keyBox').open = !k;
+}
+$('saveKey').onclick = () => {
+  try { localStorage.setItem('pv2_claudeKey', $('key').value.trim()); } catch(e){}
+  refreshKey();
+};
+refreshKey();
+
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  mode = b.dataset.m;
+  $('temaLbl').textContent = mode === 'guion' ? '¿De qué es el video?' : '¿De qué va a ser tu live?';
+  $('go').textContent = mode === 'guion' ? '✨ Escribir guion' : '✨ Preparar mi live';
+});
+
+const RULES = `Reglas de formato (muy importante, es para un teleprompter que sigue la voz palabra por palabra):
+- Escribe en español de México, natural, como habla la persona, frases cortas.
+- Indicaciones de actuación o cámara van entre corchetes, ej: [sonríe], [muestra el producto]. No se leen en voz alta.
+- Pon [PAUSA] en su propia línea donde convenga cortar la toma.
+- Sin títulos, sin markdown, sin asteriscos, sin emojis, sin numerar. Solo el texto listo para leer.`;
+
+function prompt(){
+  const tema = $('tema').value.trim(), dur = $('dur').value, tono = $('tono').value, extra = $('extra').value.trim();
+  const words = Math.round(dur * 2.4);
+  if (mode === 'guion') return `Escribe un guion de video para redes (TikTok/Reels/Facebook) usando la estructura StoryBrand: el cliente es el héroe, problema, guía con empatía y autoridad, plan simple, llamado a la acción claro, qué pierde si no actúa y cómo se ve el éxito. Gancho fuerte en la primera frase.
+Tema: ${tema}
+Duración: ${dur} segundos (aprox. ${words} palabras habladas).
+Tono: ${tono}.
+${extra ? 'Extra: ' + extra : ''}
+${RULES}`;
+  return `Prepara el guion para un live en redes que yo voy a leer. Incluye: saludo y gancho, presentación de lo que vendo/anuncio, y al final una sección con las 6 preguntas más probables del público con mi respuesta preparada a cada una (cada una con la indicación [PREGUNTA: ...] y luego la respuesta para leer), y un cierre con llamado a la acción.
+Tema: ${tema}
+Duración aproximada del bloque principal: ${dur} segundos.
+Tono: ${tono}.
+${extra ? 'Extra: ' + extra : ''}
+${RULES}`;
+}
+
+async function generate(){
+  const key = getKey();
+  if (!key){ $('keyBox').open = true; $('status').textContent = 'Primero pega y guarda tu clave de Claude arriba.'; return; }
+  if (!$('tema').value.trim()){ $('status').textContent = 'Escribe de qué es el video.'; $('tema').focus(); return; }
+  $('go').disabled = $('again').disabled = true;
+  $('status').textContent = 'Escribiendo… (unos segundos)';
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt() }] })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok){
+      const m = (j.error && j.error.message) || ('Error ' + r.status);
+      $('status').textContent = r.status === 401 ? 'La clave no es válida. Revísala arriba.' :
+        r.status === 400 && /credit|balance/i.test(m) ? 'Tu cuenta de Claude API no tiene saldo. Recarga en console.anthropic.com.' : 'No se pudo: ' + m;
+      return;
+    }
+    const text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+    $('out').value = text;
+    $('resCard').classList.remove('hide');
+    $('status').textContent = 'Listo ✓';
+    $('resCard').scrollIntoView({ behavior: 'smooth' });
+  } catch(e){
+    $('status').textContent = 'Sin conexión o bloqueado. Intenta de nuevo.';
+  } finally {
+    $('go').disabled = $('again').disabled = false;
+  }
+}
+$('go').onclick = generate;
+$('again').onclick = generate;
+
+$('use').onclick = () => {
+  const t = $('out').value.trim();
+  if (!t) return;
+  try { localStorage.setItem('pv2_script', JSON.stringify(t)); } catch(e){}
+  if (APPB) try { APPB.setScript(t); } catch(e){}
+  location.href = './';
+};
+</script>
+</body>
+</html>
