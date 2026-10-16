@@ -16,8 +16,8 @@ header img{width:40px;height:40px;border-radius:10px}
 h1{font-size:20px;margin:0}
 .sub{color:var(--dim);font-size:14px;margin:2px 0 0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
-.tabs{display:flex;gap:8px;margin-bottom:14px}
-.tab{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.tab{padding:10px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
 .tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
 label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
 input,textarea,select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#0a0a0b;color:var(--ink);font:inherit}
@@ -54,6 +54,19 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
     <button class="tab on" data-m="guion">🎬 Guion de video</button>
     <button class="tab" data-m="live">🔴 Prep. de live</button>
     <button class="tab" data-m="entrevista">🎤 Practicar entrevista</button>
+    <button class="tab" data-m="investigar">🔎 Investigar</button>
+  </div>
+
+  <div class="card hide" id="invCard">
+    <label for="invQ">¿Qué quieres saber?</label>
+    <textarea id="invQ" placeholder="Ej: ¿Qué es programación? / ¿Qué necesito para hacer una rifa legal en México?"></textarea>
+    <div class="row"><button class="btn sec" id="invMic">🎙 Preguntar con voz</button><button class="btn" id="invGo">🔎 Explicar</button></div>
+    <p class="msg" id="invStatus"></p>
+    <div id="invRes" class="hide">
+      <label>Explicación</label>
+      <div id="invOut" style="white-space:pre-wrap"></div>
+      <div class="row"><button class="btn sec" id="invNotes">📜 Pasar como notas</button><button class="btn" id="invScript">🎬 Hacer guion</button></div>
+    </div>
   </div>
 
   <div class="card hide" id="intCard">
@@ -126,11 +139,12 @@ refreshKey();
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
   mode = b.dataset.m;
-  const iv = mode === 'entrevista';
-  $('intCard').classList.toggle('hide', !iv);
-  $('genCard').classList.toggle('hide', iv);
-  if (iv) $('resCard').classList.add('hide');
-  if (iv) return;
+  const other = mode === 'entrevista' || mode === 'investigar';
+  $('intCard').classList.toggle('hide', mode !== 'entrevista');
+  $('invCard').classList.toggle('hide', mode !== 'investigar');
+  $('genCard').classList.toggle('hide', other);
+  if (other) $('resCard').classList.add('hide');
+  if (other) return;
   $('temaLbl').textContent = mode === 'guion' ? '¿De qué es el video?' : '¿De qué va a ser tu live?';
   $('go').textContent = mode === 'guion' ? '✨ Escribir guion' : '✨ Preparar mi live';
 });
@@ -306,6 +320,49 @@ $('next').onclick = () => {
   $('intRun').classList.add('hide');
   $('intSetup').classList.remove('hide');
   $('intStatus').textContent = '';
+};
+
+/* ---------- Investigar ---------- */
+let invRec = null, invOn = false;
+if (!SR) $('invMic').classList.add('hide');
+$('invMic').onclick = () => {
+  if (invOn){ try { invRec.stop(); } catch(e){} return; }
+  invRec = new SR(); invRec.lang = 'es-MX'; invRec.interimResults = true;
+  invRec.onresult = ev => { let t = ''; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript; $('invQ').value = t; };
+  invRec.onend = () => { invOn = false; $('invMic').textContent = '🎙 Preguntar con voz'; if ($('invQ').value.trim()) investigate(); };
+  invRec.onerror = () => {};
+  invRec.start(); invOn = true; $('invMic').textContent = '⏹ Listo';
+};
+
+async function investigate(){
+  const q = $('invQ').value.trim();
+  if (!q){ $('invQ').focus(); return; }
+  $('invGo').disabled = true;
+  $('invStatus').textContent = 'Investigando…';
+  try {
+    const t = await askClaude(`Explícame esto en español de México, claro y sencillo, como si me lo explicara un amigo que sabe del tema. Primero la idea principal en 2-3 líneas, luego los puntos clave cortos y un ejemplo. Texto plano, sin markdown ni asteriscos (puedes usar guiones para listas).
+Pregunta: ${q}`, 1200);
+    $('invOut').textContent = t;
+    $('invRes').classList.remove('hide');
+    $('invStatus').textContent = '';
+  } catch(e){
+    $('invStatus').textContent = e.message;
+  } finally {
+    $('invGo').disabled = false;
+  }
+}
+$('invGo').onclick = investigate;
+
+$('invNotes').onclick = () => {
+  const t = $('invOut').textContent.trim();
+  if (t) sendToPrompter(t);
+};
+
+$('invScript').onclick = () => {
+  // Usa la explicación como tema del guion de video
+  document.querySelector('.tab[data-m=guion]').click();
+  $('tema').value = `Video explicando: ${$('invQ').value.trim()}\nInformación base:\n${$('invOut').textContent.trim()}`;
+  generate();
 };
 
 $('toPrompter').onclick = () => {
