@@ -28,6 +28,17 @@ textarea{min-height:90px;resize:vertical}
 .btn:disabled{opacity:.5}
 #out{white-space:pre-wrap;min-height:120px}
 .hide{display:none}
+#chatLog{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.bub{padding:10px 12px;border-radius:14px;white-space:pre-wrap;max-width:92%;overflow-wrap:anywhere}
+.bub.u{align-self:flex-end;background:var(--accent);color:var(--accent-ink)}
+.bub.a{align-self:flex-start;background:#1d1d21}
+.bub.err{background:#3a1414;color:#ffb4ae}
+.bub .src{margin-top:8px;font-size:13px;color:var(--dim)}
+.bub .src a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bub .acts{margin-top:8px;display:flex;gap:8px}
+.bub .acts button{background:#2a2a30;border:0;color:var(--ink);border-radius:8px;padding:6px 10px;font:13px system-ui,sans-serif;cursor:pointer}
+.dots::after{content:'…';animation:d 1s steps(3) infinite}
+@keyframes d{0%{content:'.'}50%{content:'..'}100%{content:'...'}}
 .msg{font-size:14px;color:var(--dim);margin-top:10px}
 a{color:var(--accent)}
 details summary{cursor:pointer;color:var(--dim);font-size:14px}
@@ -42,11 +53,11 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
 
   <div class="card" id="keyCard">
     <details id="keyBox">
-      <summary id="keySum">🔑 Tu clave de Claude (API)</summary>
-      <label for="key">Pégala aquí. Se guarda solo en este teléfono/compu.</label>
-      <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
-      <p class="msg">La sacas en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys. Se cobra aparte según lo que uses (un guion cuesta centavos).</p>
-      <button class="btn sec" id="saveKey">Guardar clave</button>
+      <summary id="keySum">🔑 Código de acceso</summary>
+      <label for="key">Escribe tu código de acceso de TexJAHC. Se guarda en este teléfono/compu.</label>
+      <input id="key" type="password" placeholder="Tu código" autocomplete="off">
+      <p class="msg">La clave de Claude vive en el servidor, no aquí. El código solo evita que otros usen tu saldo.</p>
+      <button class="btn sec" id="saveKey">Guardar código</button>
     </details>
   </div>
 
@@ -55,6 +66,17 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
     <button class="tab" data-m="live">🔴 Prep. de live</button>
     <button class="tab" data-m="entrevista">🎤 Practicar entrevista</button>
     <button class="tab" data-m="investigar">🔎 Investigar</button>
+    <button class="tab" data-m="chat" style="grid-column:1/-1">💬 Chat con IA</button>
+  </div>
+
+  <div class="card hide" id="chatCard">
+    <div id="chatLog" aria-live="polite"></div>
+    <p class="msg" id="chatEmpty">Pregúntale lo que quieras. Puedes seguir preguntando sobre lo mismo y se acuerda de la conversación.</p>
+    <textarea id="chatQ" placeholder="Escribe tu pregunta…" rows="3"></textarea>
+    <label style="display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px;margin-top:10px"><input type="checkbox" id="chatWeb" style="width:auto"> 🌐 Buscar en internet (info actual con fuentes)</label>
+    <div class="row"><button class="btn sec" id="chatMic">🎙 Voz</button><button class="btn" id="chatSend">Enviar ➤</button></div>
+    <p class="msg" id="chatStatus"></p>
+    <button class="btn sec" id="chatNew">🗑 Nueva conversación</button>
   </div>
 
   <div class="card hide" id="invCard">
@@ -120,18 +142,20 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
 <script>
 const $ = id => document.getElementById(id);
 const APPB = window.TexJAHCAndroid || null;
-const MODEL = 'claude-sonnet-5-5';
+// Servidor de TexJAHC (Supabase): ahí vive la clave de Claude, nunca en esta página.
+const API = 'https://veznsmmyylsqrodqzcul.supabase.co/functions/v1/chat';
 let mode = 'guion';
 
-function getKey(){ try { return localStorage.getItem('pv2_claudeKey') || ''; } catch(e){ return ''; } }
+function getKey(){ try { return localStorage.getItem('pv2_accessCode') || ''; } catch(e){ return ''; } }
+try { localStorage.removeItem('pv2_claudeKey'); } catch(e){}
 function refreshKey(){
   const k = getKey();
   $('key').value = k;
-  $('keySum').textContent = k ? '🔑 Clave guardada ✓ (toca para cambiarla)' : '🔑 Tu clave de Claude (API) — falta';
+  $('keySum').textContent = k ? '🔑 Código guardado ✓ (toca para cambiarlo)' : '🔑 Código de acceso — falta';
   $('keyBox').open = !k;
 }
 $('saveKey').onclick = () => {
-  try { localStorage.setItem('pv2_claudeKey', $('key').value.trim()); } catch(e){}
+  try { localStorage.setItem('pv2_accessCode', $('key').value.trim()); } catch(e){}
   refreshKey();
 };
 refreshKey();
@@ -139,7 +163,8 @@ refreshKey();
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
   mode = b.dataset.m;
-  const other = mode === 'entrevista' || mode === 'investigar';
+  const other = mode === 'entrevista' || mode === 'investigar' || mode === 'chat';
+  $('chatCard').classList.toggle('hide', mode !== 'chat');
   $('intCard').classList.toggle('hide', mode !== 'entrevista');
   $('invCard').classList.toggle('hide', mode !== 'investigar');
   $('genCard').classList.toggle('hide', other);
@@ -172,30 +197,29 @@ ${extra ? 'Extra: ' + extra : ''}
 ${RULES}`;
 }
 
-/** Llama a Claude. Regresa el texto o lanza un Error con mensaje entendible. */
-async function askClaude(content, maxTokens){
-  const key = getKey();
-  if (!key){ $('keyBox').open = true; throw new Error('Primero pega y guarda tu clave de Claude arriba.'); }
+/** Manda la conversación al servidor. Regresa {text, sources} o lanza un Error entendible. */
+async function callAI(messages, opts){
+  const code = getKey();
+  if (!code){ $('keyBox').open = true; throw new Error('Primero escribe y guarda tu código de acceso arriba.'); }
   let r;
   try {
-    r = await fetch('https://api.anthropic.com/v1/messages', {
+    r = await fetch(API, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens || 2000, messages: [{ role: 'user', content }] })
+      headers: { 'content-type': 'application/json', 'x-texjahc-code': code },
+      body: JSON.stringify({ messages, search: !!(opts && opts.search), maxTokens: (opts && opts.maxTokens) || 2000 })
     });
-  } catch(e){ throw new Error('Sin conexión o bloqueado. Intenta de nuevo.'); }
+  } catch(e){ throw new Error('Sin conexión. Revisa tu internet e intenta de nuevo.'); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok){
-    const m = (j.error && j.error.message) || ('Error ' + r.status);
-    throw new Error(r.status === 401 ? 'La clave no es válida. Revísala arriba.' :
-      /credit|balance/i.test(m) ? 'Tu cuenta de Claude API no tiene saldo. Recarga en console.anthropic.com.' : 'No se pudo: ' + m);
+    if (r.status === 401){ $('keyBox').open = true; }
+    throw new Error(j.error || ('No se pudo (error ' + r.status + ').'));
   }
-  return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+  return { text: j.text || '', sources: j.sources || [] };
+}
+
+/** Una sola pregunta, sin historial. */
+async function askClaude(content, maxTokens){
+  return (await callAI([{ role: 'user', content }], { maxTokens })).text;
 }
 
 async function generate(){
@@ -377,6 +401,71 @@ $('invScript').onclick = () => {
   $('tema').value = `Video explicando: ${$('invQ').value.trim()}\nInformación base:\n${$('invOut').textContent.trim()}`;
   generate();
 };
+
+/* ---------- Chat con IA ---------- */
+let chat = [];
+try { chat = JSON.parse(localStorage.getItem('pv2_chat') || '[]'); } catch(e){ chat = []; }
+function saveChat(){ try { localStorage.setItem('pv2_chat', JSON.stringify(chat.slice(-40))); } catch(e){} }
+
+function bubble(m, i){
+  const d = document.createElement('div');
+  d.className = 'bub ' + (m.role === 'user' ? 'u' : 'a') + (m.error ? ' err' : '');
+  d.textContent = m.content;
+  if (m.sources && m.sources.length){
+    const s = document.createElement('div'); s.className = 'src'; s.textContent = 'Fuentes:';
+    m.sources.slice(0, 6).forEach(x => { const a = document.createElement('a'); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = x.title; s.appendChild(a); });
+    d.appendChild(s);
+  }
+  if (m.role === 'assistant' && !m.error){
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const n = document.createElement('button'); n.textContent = '📜 A notas';
+    n.onclick = () => sendToPrompter(m.content);
+    const c = document.createElement('button'); c.textContent = '📋 Copiar';
+    c.onclick = () => { try { navigator.clipboard.writeText(m.content); c.textContent = '✓ Copiado'; } catch(e){} };
+    acts.append(n, c); d.appendChild(acts);
+  }
+  return d;
+}
+function renderChat(){
+  const log = $('chatLog'); log.innerHTML = '';
+  chat.forEach((m, i) => log.appendChild(bubble(m, i)));
+  $('chatEmpty').classList.toggle('hide', chat.length > 0);
+}
+renderChat();
+
+let chatBusy = false;
+async function sendChat(){
+  const q = $('chatQ').value.trim();
+  if (!q || chatBusy) return;
+  chatBusy = true; $('chatSend').disabled = true;
+  chat = chat.filter(m => !m.error);
+  chat.push({ role: 'user', content: q });
+  $('chatQ').value = '';
+  renderChat();
+  const wait = document.createElement('div'); wait.className = 'bub a dots';
+  wait.textContent = $('chatWeb').checked ? 'Buscando en internet' : 'Pensando';
+  $('chatLog').appendChild(wait); wait.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  try {
+    const hist = chat.filter(m => !m.error).map(m => ({ role: m.role, content: m.content }));
+    const r = await callAI(hist, { search: $('chatWeb').checked, maxTokens: 2500 });
+    chat.push({ role: 'assistant', content: r.text, sources: r.sources });
+  } catch(e){
+    chat.push({ role: 'assistant', content: e.message, error: true });
+  } finally {
+    chatBusy = false; $('chatSend').disabled = false;
+    saveChat(); renderChat();
+    const last = $('chatLog').lastElementChild; if (last) last.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+$('chatSend').onclick = sendChat;
+$('chatQ').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+$('chatNew').onclick = () => { chat = []; saveChat(); renderChat(); };
+$('chatMic').onclick = () => {
+  if (dictStop){ dictStop(); return; }
+  $('chatMic').textContent = '⏹ Listo';
+  dictate(t => { $('chatQ').value = t; }, () => { $('chatMic').textContent = '🎙 Voz'; if ($('chatQ').value.trim()) sendChat(); });
+};
+if (!SR && !NATIVE_SR) $('chatMic').classList.add('hide');
 
 $('toPrompter').onclick = () => {
   if (!studied.length) return;

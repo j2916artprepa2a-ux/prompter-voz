@@ -101,9 +101,9 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         col.addView(pill("▶  Abrir cuadrito flotante (para TikTok, Insta, FB)", false) { launch() }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
-        col.addView(pill("🔎  Preguntar e investigar con IA", false) {
+        col.addView(pill("💬  Chat con IA (preguntar e investigar)", false) {
             prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
-            startActivity(Intent(this, RecordActivity::class.java).putExtra(RecordActivity.EXTRA_PAGE, "asistente.html#investigar"))
+            startActivity(Intent(this, RecordActivity::class.java).putExtra(RecordActivity.EXTRA_PAGE, "asistente.html#chat"))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         errorView = TextView(this).apply {
             setTextColor(0xFFFF8A80.toInt()); textSize = 13f; setPadding(0, dp(8), 0, 0)
