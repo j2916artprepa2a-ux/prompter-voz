@@ -64,6 +64,10 @@ class OverlayService : Service(), RecognitionListener {
     private lateinit var status: TextView
     private lateinit var playBtn: TextView
     private lateinit var modeBtn: TextView
+    private var aiPanel: OverlayAiPanel? = null
+    private var aiWasPlaying = false
+    private var lastCommand = ""
+    private var lastCommandAt = 0L
 
     private var follower = Follower("")
     private var fontSp = 22f
@@ -99,6 +103,7 @@ class OverlayService : Service(), RecognitionListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         if (intent?.action == ACTION_RECREATE && root != null) {
+            closeAiPanel()
             // pasar el cuadrito a ventana de accesibilidad (o regresarlo a normal)
             setPlaying(false)
             root?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
@@ -213,6 +218,7 @@ class OverlayService : Service(), RecognitionListener {
         val move = btn("✥") {}
         modeBtn = btn("🎙") { toggleMode() }
         playBtn = btn("▶") { togglePlay() }
+        val ai = btn("🤖 IA") { toggleAiPanel() }
         val restart = btn("↺") { follower.pos = 0; render(true) }
         val smaller = btn("A−") { setFont(fontSp - 2f) }
         val bigger = btn("A+") { setFont(fontSp + 2f) }
@@ -225,7 +231,7 @@ class OverlayService : Service(), RecognitionListener {
         }
         row.addView(move)
         row.addView(status, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        listOf(modeBtn, playBtn, restart, smaller, bigger, close).forEach { row.addView(it) }
+        listOf(modeBtn, playBtn, ai, restart, smaller, bigger, close).forEach { row.addView(it) }
         box.addView(row)
 
         params = WindowManager.LayoutParams(
@@ -270,6 +276,51 @@ class OverlayService : Service(), RecognitionListener {
         w.addView(box, params)
         root = box
         reload()
+    }
+
+    // El panel de IA es independiente del seguidor: no modifica follower.pos ni scrollY.
+    private fun toggleAiPanel() {
+        if (aiPanel != null) { closeAiPanel(); return }
+        val container = root ?: return
+        aiWasPlaying = playing
+        if (playing) setPlaying(false) // libera el micrófono del seguimiento
+        val panel = OverlayAiPanel(this) { closeAiPanel() }
+        aiPanel = panel
+        container.addView(panel.view)
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        wm?.updateViewLayout(container, params)
+        status.text = "IA abierta · guion conservado"
+    }
+
+    private fun closeAiPanel() {
+        val panel = aiPanel ?: return
+        aiPanel = null
+        panel.close()
+        root?.removeView(panel.view)
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL.inv()
+        root?.let { wm?.updateViewLayout(it, params) }
+        status.text = "Guion en pausa · toca ▶ para seguir"
+        aiWasPlaying = false
+    }
+
+    private fun processVoiceCommand(raw: String): Boolean {
+        val normalized = java.text.Normalizer.normalize(raw.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("[\\u0300-\\u036f]"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+        val match = Regex("(?:texjahc|tex jahc|tex yac|tex yak) (pausa|sigue|atras|mas grande)").find(normalized) ?: return false
+        val cmd = match.groupValues[1]
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cmd == lastCommand && now - lastCommandAt < 1800L) return true
+        lastCommand = cmd; lastCommandAt = now
+        when (cmd) {
+            "pausa" -> setPlaying(false)
+            "sigue" -> if (!playing) setPlaying(true)
+            "atras" -> { follower.pos = (follower.pos - 8).coerceAtLeast(0); render(true) }
+            "mas grande" -> setFont(fontSp + 2f)
+        }
+        return true
     }
 
     private fun reload() {
@@ -387,6 +438,7 @@ class OverlayService : Service(), RecognitionListener {
         }
         val arr = org.json.JSONArray()
         set.forEach { arr.put(it) }
+        listOf("texjahc", "tex", "jahc", "pausa", "sigue", "atras", "mas", "grande", "regresa", "precio", "fecha").forEach { arr.put(it) }
         arr.put("[unk]")
         return arr.toString()
     }
@@ -503,6 +555,7 @@ class OverlayService : Service(), RecognitionListener {
         if (t.isBlank()) return
         errors = 0
         status.text = "🎙 " + t.trim().split(Regex("\\s+")).takeLast(2).joinToString(" ")
+        if (processVoiceCommand(t)) return
         if (follower.follow(t)) render(false)
     }
 
@@ -558,6 +611,7 @@ class OverlayService : Service(), RecognitionListener {
                 try { getSystemService(android.media.AudioManager::class.java).unregisterAudioRecordingCallback(it) } catch (_: Exception) {}
             }
         }
+        aiPanel?.close(); aiPanel = null
         running = false
         playing = false
         h.removeCallbacksAndMessages(null)
