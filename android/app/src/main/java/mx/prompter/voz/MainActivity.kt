@@ -10,6 +10,13 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.UnderlineSpan
+import android.view.View
+import android.widget.HorizontalScrollView
 import android.provider.Settings
 import android.text.InputType
 import android.util.TypedValue
@@ -60,6 +67,13 @@ class MainActivity : Activity() {
     private lateinit var a11yBtn: Button
     private var waitingOverlay = false
     private var askedPerms = false
+    private lateinit var setupBox: LinearLayout
+    private lateinit var setupTitle: TextView
+    private var wizard = false
+    private var lastWizardStep = ""
+    private lateinit var preview: TextView
+    private val swatchViews = ArrayList<Pair<String, View>>()
+    private val faceButtons = ArrayList<Pair<String, Button>>()
 
     private fun dp(v: Int): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
@@ -95,6 +109,7 @@ class MainActivity : Activity() {
         col.addView(label(
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
+        buildSetup(col)
         col.addView(pill("🎥  Grabar video aquí (te sigue la voz)", true) {
             prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
             startActivity(Intent(this, RecordActivity::class.java))
@@ -164,12 +179,7 @@ class MainActivity : Activity() {
             max = 180; progress = prefs.getInt(Prefs.WPM, 140) - 60
             setOnSeekBarChangeListener(simple { v -> prefs.edit().putInt(Prefs.WPM, v + 60).apply(); updateLabels() })
         })
-        fontLabel = label("", 14f, true)
-        col.addView(fontLabel)
-        col.addView(SeekBar(this).apply {
-            max = 40; progress = prefs.getInt(Prefs.FONT, 22) - 12
-            setOnSeekBarChangeListener(simple { v -> prefs.edit().putInt(Prefs.FONT, v + 12).apply(); updateLabels() })
-        })
+        buildStyle(col)
         updateLabels()
 
         col.addView(CheckBox(this).apply {
@@ -202,6 +212,191 @@ class MainActivity : Activity() {
         override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) { if (fromUser) onChange(v) }
         override fun onStartTrackingTouch(s: SeekBar?) {}
         override fun onStopTrackingTouch(s: SeekBar?) {}
+    }
+
+    // ---------- 🎨 estilo del texto: color, tipo de letra y tamaño ----------
+    private fun buildStyle(col: LinearLayout) {
+        col.addView(label("🎨 Estilo del texto", 16f, true, Color.WHITE))
+        preview = TextView(this).apply {
+            setPadding(dp(14), dp(12), dp(14), dp(12)); setLineSpacing(0f, 1.12f)
+            background = GradientDrawable().apply { setColor(Color.BLACK); cornerRadius = dp(14).toFloat(); setStroke(dp(1), 0xFF2A2A2E.toInt()) }
+        }
+        col.addView(preview)
+        fontLabel = label("", 14f, true)
+        col.addView(fontLabel)
+        col.addView(SeekBar(this).apply {
+            max = 40; progress = prefs.getInt(Prefs.FONT, 22) - 12
+            setOnSeekBarChangeListener(simple { v -> prefs.edit().putInt(Prefs.FONT, v + 12).apply(); updateLabels(); styleChanged() })
+        })
+        col.addView(label("Color del texto", 14f, true))
+        val sw = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (c in TextStyle.colors) {
+            val v = View(this).apply {
+                contentDescription = c.name
+                setOnClickListener { prefs.edit().putString(TextStyle.COLOR, c.key).apply(); styleChanged() }
+            }
+            swatchViews.add(c.key to v)
+            sw.addView(v, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(10) })
+        }
+        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(sw) })
+        col.addView(label("Tipo de letra", 14f, true))
+        val fr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (f in TextStyle.faces) {
+            val b = pill(f.name, false) { prefs.edit().putString(TextStyle.FONT_FACE, f.key).apply(); styleChanged() }
+            b.typeface = TextStyle.typeface(f); b.textSize = 15f
+            faceButtons.add(f.key to b)
+            fr.addView(b, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) })
+        }
+        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(fr) })
+        col.addView(pill("Como estaba", false) {
+            prefs.edit().putString(TextStyle.COLOR, "white").putString(TextStyle.FONT_FACE, "normal").putInt(Prefs.FONT, 22).apply()
+            recreate()
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        paintStyle()
+    }
+
+    private fun paintStyle() {
+        val c = TextStyle.color(prefs); val f = TextStyle.face(prefs)
+        val t = "Así se ve lo que ya dijiste, esta es la palabra que sigue y lo demás de tu guion."
+        val sp = SpannableString(t)
+        val cur = t.indexOf("esta")
+        sp.setSpan(ForegroundColorSpan(TextStyle.dim(c.argb)), 0, cur, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sp.setSpan(ForegroundColorSpan(c.highlight), cur, cur + 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sp.setSpan(UnderlineSpan(), cur, cur + 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        preview.text = sp
+        preview.setTextColor(c.argb)
+        preview.typeface = TextStyle.typeface(f)
+        preview.textSize = prefs.getInt(Prefs.FONT, 22).toFloat().coerceAtMost(34f)
+        for ((k, v) in swatchViews) {
+            val col = TextStyle.colors.first { it.key == k }
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL; setColor(col.argb)
+                if (k == c.key) setStroke(dp(4), Color.WHITE) else setStroke(dp(1), 0x33FFFFFF)
+            }
+        }
+        for ((k, b) in faceButtons) {
+            val on = k == f.key
+            (b.background as GradientDrawable).setColor(if (on) 0xFFFFD34D.toInt() else 0xFF26262A.toInt())
+            b.setTextColor(if (on) 0xFF1A1400.toInt() else Color.WHITE)
+        }
+    }
+
+    /** Aplica el estilo al instante, también al cuadrito si ya está abierto (sin perder dónde ibas). */
+    private fun styleChanged() {
+        paintStyle()
+        if (OverlayService.running) {
+            try { startService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_STYLE)) } catch (_: Exception) {}
+        }
+    }
+
+    // ---------- ✅ configuración guiada: todo lo que antes había que activar a mano ----------
+    private data class Step(val title: String, val hint: String, val done: () -> Boolean, val fix: () -> Unit)
+
+    private fun steps(): List<Step> {
+        val list = ArrayList<Step>()
+        list.add(Step("Mostrar sobre otras apps", "Para que el cuadrito flote encima de TikTok, Insta o FB.",
+            { Settings.canDrawOverlays(this) }) {
+            Toast.makeText(this, "Activa TexJAHC y regresa con ◀", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        })
+        list.add(Step("Micrófono", "Para seguir tu voz palabra por palabra.",
+            { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }) {
+            if (shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) || !prefs.getBoolean("askedMic", false)) {
+                prefs.edit().putBoolean("askedMic", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 8)
+            } else openAppInfo("Permisos › Micrófono › Permitir")
+        })
+        if (Build.VERSION.SDK_INT >= 33) list.add(Step("Notificaciones", "Android la pide para que el cuadrito no se cierre solo.",
+            { checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED }) {
+            if (!prefs.getBoolean("askedNotif", false)) {
+                prefs.edit().putBoolean("askedNotif", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 8)
+            } else openAppInfo("Notificaciones › Permitir")
+        })
+        list.add(Step("Voz integrada (≈40 MB, una vez)", "Te sigue sin internet. Mejor con WiFi.",
+            { ModelStore.ready(this) }) { downloadVoice(false) })
+        list.add(Step("Sin límite de batería", "Para que el cel no cierre el cuadrito a media grabación.",
+            { (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName) }) {
+            try {
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                try { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) { openAppInfo("Batería › Sin restricciones") }
+            }
+        })
+        if (BuildConfig.FLAVOR == "live") list.add(Step("Accesibilidad (versión Live)",
+            "Si sale “Ajuste restringido”: en la siguiente pantalla toca ⋮ › “Permitir ajustes restringidos”, regresa y toca otra vez.",
+            { a11yEnabled() }) {
+            if (!prefs.getBoolean("a11yTried", false) && Build.VERSION.SDK_INT >= 33) {
+                prefs.edit().putBoolean("a11yTried", true).apply()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                Toast.makeText(this, "Busca TexJAHC › Activar. Si está gris, regresa y vuelve a tocar.", Toast.LENGTH_LONG).show()
+            } else if (Build.VERSION.SDK_INT >= 33 && prefs.getBoolean("a11yTried", false) && !prefs.getBoolean("restrictedShown", false)) {
+                prefs.edit().putBoolean("restrictedShown", true).apply()
+                openAppInfo("⋮ (arriba a la derecha) › Permitir ajustes restringidos")
+            } else {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                Toast.makeText(this, "Busca TexJAHC › Activar", Toast.LENGTH_LONG).show()
+            }
+        })
+        return list
+    }
+
+    private fun openAppInfo(where: String) {
+        Toast.makeText(this, "Ahí entra a: $where", Toast.LENGTH_LONG).show()
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    private fun buildSetup(col: LinearLayout) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(4), dp(14), dp(12))
+            background = GradientDrawable().apply { setColor(0xFF141416.toInt()); cornerRadius = dp(16).toFloat() }
+        }
+        setupTitle = label("", 15f, true, Color.WHITE)
+        card.addView(setupTitle)
+        setupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        card.addView(setupBox)
+        card.addView(pill("⚡  Configurar todo paso a paso", true) { wizard = true; nextStep() },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        col.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10); bottomMargin = dp(6) })
+        refreshSetup()
+    }
+
+    private fun refreshSetup() {
+        if (!::setupBox.isInitialized) return
+        val st = steps()
+        val ok = st.count { it.done() }
+        setupTitle.text = if (ok == st.size) "✅ Tu cel ya está listo ($ok de ${st.size})" else "⚙️ Prepara tu cel: $ok de ${st.size} listos"
+        setupBox.removeAllViews()
+        for (s in st) {
+            val done = s.done()
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
+            val txt = TextView(this).apply {
+                text = (if (done) "✓  " else "○  ") + s.title + if (done) "" else "\n" + s.hint
+                setTextColor(if (done) 0xFF8BE59B.toInt() else 0xDDFFFFFF.toInt()); textSize = 13.5f
+            }
+            row.addView(txt, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            if (!done) row.addView(pill("Activar", false) { s.fix() }.apply { textSize = 13f; setPadding(dp(14), dp(6), dp(14), dp(6)) })
+            setupBox.addView(row)
+        }
+    }
+
+    /** En modo “Configurar todo”: al regresar de cada ajuste, abre el siguiente que falte. */
+    private fun nextStep() {
+        refreshSetup()
+        val pending = steps().firstOrNull { !it.done() }
+        if (pending == null) {
+            if (wizard) Toast.makeText(this, "¡Listo! Tu cel ya está configurado ✓", Toast.LENGTH_LONG).show()
+            wizard = false; lastWizardStep = ""; return
+        }
+        // si regresaste sin activarlo, no te lo vuelvo a abrir en bucle
+        if (pending.title == lastWizardStep) {
+            wizard = false; lastWizardStep = ""
+            Toast.makeText(this, "Falta: ${pending.title}. Toca su botón “Activar” cuando quieras.", Toast.LENGTH_LONG).show()
+            return
+        }
+        lastWizardStep = pending.title
+        pending.fix()
     }
 
     private fun updateLabels() {
@@ -274,7 +469,9 @@ class MainActivity : Activity() {
                     voiceInfo.text = "⚠️ No se pudo descargar la voz: $err. Revisa tu internet e intenta otra vez."
                 } else {
                     updateVoiceInfo()
+                    refreshSetup()
                     Toast.makeText(this, "Voz lista ✓", Toast.LENGTH_SHORT).show()
+                    if (wizard) { lastWizardStep = ""; nextStep() }
                     if (launchAfterDownload) launch()
                 }
             }
@@ -326,11 +523,14 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 7) launch()
+        if (requestCode == 8) { refreshSetup(); if (wizard) window.decorView.postDelayed({ nextStep() }, 400) }
     }
 
     override fun onResume() {
         super.onResume()
         if (::a11yInfo.isInitialized) updateA11yInfo()
+        refreshSetup()
+        if (wizard && !waitingOverlay) window.decorView.postDelayed({ if (wizard) nextStep() }, 500)
         if (::script.isInitialized) {
             val t = prefs.getString(Prefs.SCRIPT, null)
             if (t != null && t != script.text.toString()) script.setText(t)

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Instalar TexJAHC</title>
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#000;--panel:#121214;--ink:#f5f5f7;--dim:rgba(245,245,247,.6);--accent:#ffd34d;--accent-ink:#1a1400;--line:rgba(255,255,255,.12)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:680px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+header img{width:44px;height:44px;border-radius:12px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--dim);font-size:14px;margin:2px 0 0}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.tab{padding:12px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:600 16px system-ui,sans-serif;cursor:pointer}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+.card h2{font-size:17px;margin:0 0 6px;display:flex;gap:10px;align-items:baseline}
+.n{display:inline-grid;place-items:center;min-width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:700}
+.card p,.card li{color:var(--dim);margin:6px 0}
+.card b{color:var(--ink)}
+.btn{display:block;text-align:center;margin-top:10px;padding:13px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:700;text-decoration:none}
+.btn.sec{background:#26262b;color:var(--ink)}
+.note{font-size:14px;color:var(--dim);border-left:3px solid var(--accent);padding-left:10px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <div><h1>Instalar TexJAHC</h1><p class="sub">Todo lo que hay que hacer en tu cel, en orden</p></div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab" data-t="android">🤖 Android</button>
+    <button class="tab" data-t="iphone">🍎 iPhone</button>
+  </div>
+
+  <section id="android">
+    <div class="card">
+      <h2><span class="n">1</span>Descarga la app</h2>
+      <p>La normal sirve para casi todo. La <b>Live</b> además intenta seguirte la voz mientras grabas dentro de otra app (experimental).</p>
+      <a class="btn" href="descargas/TexJAHC.apk">Descargar TexJAHC</a>
+      <a class="btn sec" href="descargas/TexJAHC-live.apk">Descargar TexJAHC Live</a>
+    </div>
+    <div class="card">
+      <h2><span class="n">2</span>Si Play Protect la bloquea</h2>
+      <p>Sale “Se bloqueó la app” porque no viene de la Play Store. Toca <b>Más detalles › Instalar de todas formas</b>.</p>
+      <p>Si no aparece esa opción (pasa con la Live): abre <b>Play Store › tu foto › Play Protect › ⚙️</b>, apaga “Analizar apps con Play Protect”, instala, y después vuelve a encenderlo.</p>
+    </div>
+    <div class="card">
+      <h2><span class="n">3</span>Permitir instalar</h2>
+      <p>Si te pide permiso para instalar apps desconocidas, toca <b>Configuración › Permitir de esta fuente</b> y regresa.</p>
+    </div>
+    <div class="card">
+      <h2><span class="n">4</span>Abre TexJAHC y toca “⚡ Configurar todo”</h2>
+      <p>La app te lleva sola a cada ajuste, uno por uno. Solo actívalo y regresa con ◀:</p>
+      <ul>
+        <li><b>Mostrar sobre otras apps</b>: para que el cuadrito flote.</li>
+        <li><b>Micrófono</b> y <b>Notificaciones</b>.</li>
+        <li><b>Voz integrada</b>: se descarga una vez (≈40 MB, mejor con WiFi).</li>
+        <li><b>Sin límite de batería</b>: para que no se cierre a media grabación.</li>
+        <li><b>Accesibilidad</b> (solo Live).</li>
+      </ul>
+      <p class="note">Si en Accesibilidad TexJAHC sale gris o dice “Ajuste restringido”: abre <b>Ajustes › Apps › TexJAHC</b>, toca <b>⋮</b> arriba a la derecha › <b>Permitir ajustes restringidos</b>, y vuelve a activarlo. En celulares vivo y Xiaomi también revisa “Mostrar ventanas emergentes”.</p>
+    </div>
+  </section>
+
+  <section id="iphone" class="hide">
+    <div class="card">
+      <h2><span class="n">1</span>Ábrela en Safari</h2>
+      <p>Tiene que ser <b>Safari</b> (no el navegador de TikTok, Instagram o WhatsApp).</p>
+      <a class="btn" href="./">Abrir TexJAHC</a>
+    </div>
+    <div class="card">
+      <h2><span class="n">2</span>Agrégala a tu pantalla</h2>
+      <p>Toca <b>Compartir</b> (el cuadrito con flecha) › <b>Agregar a pantalla de inicio</b> › Agregar. Queda con su ícono, gratis.</p>
+    </div>
+    <div class="card">
+      <h2><span class="n">3</span>Permite cámara y micrófono</h2>
+      <p>La primera vez toca <b>Permitir</b>. Si dijiste que no: <b>Ajustes › Safari › Cámara</b> y <b>Micrófono › Permitir</b>.</p>
+    </div>
+    <div class="card">
+      <h2><span class="n">4</span>Activa el Dictado (la voz de Apple)</h2>
+      <p>Para que te siga palabra por palabra con el reconocimiento de voz de Apple: <b>Ajustes › General › Teclado › Activar dictado</b>.</p>
+      <p>Si no lo activas, TexJAHC usa su voz integrada (se descarga una vez, ≈40 MB).</p>
+    </div>
+    <div class="card">
+      <p class="note">En iPhone el cuadrito no puede flotar encima de TikTok o Instagram: Apple no lo permite a ninguna app. Graba dentro de TexJAHC con el texto debajo de la cámara y luego sube tu video.</p>
+    </div>
+  </section>
+</main>
+<script>
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function show(t){
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.getElementById('android').classList.toggle('hide', t !== 'android');
+  document.getElementById('iphone').classList.toggle('hide', t !== 'iphone');
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => show(b.dataset.t));
+show(location.hash === '#iphone' || (isIOS && location.hash !== '#android') ? 'iphone' : 'android');
+</script>
+</body>
+</html>

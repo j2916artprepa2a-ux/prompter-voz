@@ -49,6 +49,7 @@ class OverlayService : Service(), RecognitionListener {
         const val ACTION_STOP = "mx.prompter.voz.STOP"
         const val ACTION_RELOAD = "mx.prompter.voz.RELOAD"
         const val ACTION_RECREATE = "mx.prompter.voz.RECREATE"
+        const val ACTION_STYLE = "mx.prompter.voz.STYLE"
         const val CHANNEL = "prompter"
         var running = false
     }
@@ -98,6 +99,11 @@ class OverlayService : Service(), RecognitionListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_STYLE) {
+            // solo cambia color/letra/tamaño: el guion se queda donde ibas
+            if (root != null) { applyTextStyle(); setFont(prefs.getInt(Prefs.FONT, 22).toFloat()) } else stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_RECREATE && root != null) {
             // pasar el cuadrito a ventana de accesibilidad (o regresarlo a normal)
             setPlaying(false)
@@ -276,10 +282,21 @@ class OverlayService : Service(), RecognitionListener {
         follower = Follower(prefs.getString(Prefs.SCRIPT, Prefs.DEFAULT_SCRIPT) ?: Prefs.DEFAULT_SCRIPT)
         voice = prefs.getBoolean(Prefs.VOICE, true)
         wpm = prefs.getInt(Prefs.WPM, 140)
+        applyTextStyle()
         setFont(prefs.getInt(Prefs.FONT, 22).toFloat())
         modeBtn.text = if (voice) "🎙" else "⏱"
         setPlaying(false)
         status.text = if (voice) "Toca ▶ y habla" else "Toca ▶ para empezar"
+    }
+
+    // color y tipo de letra elegidos en la app
+    private var txtColor = Color.WHITE
+    private var hlColor = 0xFFFFD34D.toInt()
+    private fun applyTextStyle() {
+        val c = TextStyle.color(prefs)
+        txtColor = c.argb; hlColor = c.highlight
+        tv.setTextColor(txtColor)
+        tv.typeface = TextStyle.typeface(TextStyle.face(prefs))
     }
 
     private fun setFont(sp: Float) {
@@ -301,11 +318,11 @@ class OverlayService : Service(), RecognitionListener {
         }
         if (follower.pos > 0 && follower.words.isNotEmpty()) {
             val end = follower.words[minOf(follower.pos, follower.words.size) - 1].last + 1
-            sp.setSpan(ForegroundColorSpan(0x55FFFFFF), 0, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sp.setSpan(ForegroundColorSpan(TextStyle.dim(txtColor)), 0, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         if (follower.pos < follower.words.size) {
             val r = follower.words[follower.pos]
-            sp.setSpan(ForegroundColorSpan(0xFFFFD34D.toInt()), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sp.setSpan(ForegroundColorSpan(hlColor), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             sp.setSpan(UnderlineSpan(), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         tv.text = sp

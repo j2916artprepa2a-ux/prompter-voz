@@ -1,7 +1,7 @@
 // TexJAHC — service worker
 // Objetivo: abrir al instante, gastar cero datos después de la primera vez
 // y actualizarse sola cuando hay versión nueva.
-const APP = 'texjahc-app-v21';      // la app
+const APP = 'texjahc-app-v22';      // la app
 const LIB = 'prompter-lib-v1';       // librerías pesadas (vosk.js, ffmpeg): se bajan UNA vez y se quedan
 const CORE = ['./', 'index.html', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 
