@@ -189,6 +189,17 @@ body.pip{background:#000}
 #stylePrev .cur{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:.2em}
 #styleBtn{font:700 11px/1 system-ui,sans-serif;color:rgba(255,255,255,.55)}
 @media (max-width:600px){#styleBtn{font-size:9px}}
+/* Acceso a la IA web: conserva el teleprompter y sus funciones actuales. */
+#aiBtn{width:auto;min-width:51px;padding:0 4px;font-size:12px;font-weight:700;color:#ffd34d;white-space:nowrap}
+#aiPanel{position:fixed;z-index:31;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px}
+#aiPanel.show{display:flex}
+#aiCard{background:#161619;border:1px solid #36363a;border-radius:18px;width:min(92vw,860px);height:min(88vh,760px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009}
+#aiHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;font-size:16px;font-weight:700}
+#aiActions{display:flex;gap:8px}
+#aiActions button{background:#29292d;border:0;border-radius:9px;padding:7px 12px;cursor:pointer;font-size:14px}
+#aiFrame{border:0;flex:1;width:100%;background:#fff}
+#aiHint{font-size:12px;padding:7px 16px;color:#bbb}
+body.pip #aiBtn{min-width:52px}
 </style>
 </head>
 <body>
@@ -212,11 +223,19 @@ body.pip{background:#000}
     <button class="mini" id="moveBtn" aria-label="Mover el cuadro"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
     <button class="mini" id="styleBtn" aria-label="Color, letra y tamaño">Aa</button>
     <button class="mini" id="farBtn" aria-label="Letra grande"><svg viewBox="0 0 24 24"><path d="M3 19L9 5l6 14M5.5 14h7"/><path d="M17 9v8M14.5 11.5L17 9l2.5 2.5"/></svg></button>
+    <button class="mini" id="aiBtn" title="Abrir chat con IA" aria-label="Abrir chat con IA">🤖 IA</button>
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 </div>
 
+<div id="aiPanel" role="dialog" aria-modal="true" aria-label="Chat con IA de TexJAHC">
+  <div id="aiCard">
+    <div id="aiHead"><span>🤖 Chat con IA de TexJAHC</span><div id="aiActions"><button id="aiNewTab" type="button">Abrir aparte ↗</button><button id="aiClose" type="button" aria-label="Cerrar chat">✕</button></div></div>
+    <div id="aiHint">Este botón abre el chat web que ya existe en el proyecto. Las opciones de voz dependen de ese chat y del navegador.</div>
+    <iframe id="aiFrame" title="Asistente TexJAHC" allow="microphone" loading="lazy"></iframe>
+  </div>
+</div>
 <div id="segBar"></div>
 <div id="mergeMsg"><div class="spin"></div><span id="mergeTxt">Uniendo tus clips…</span></div>
 <button class="b" id="flipBtn" title="Voltear cámara" aria-label="Voltear cámara">
@@ -1176,6 +1195,19 @@ window.addEventListener('pointerup', () => {
   }
 });
 
+// IA: abre el chat web existente del proyecto, sin exponer claves ni alterar el servicio Android.
+const aiUrl = new URL('asistente.html', location.href).href;
+function showAi(){
+  // La ventana Picture-in-Picture mueve el cuadro a otro documento: el chat se abre aparte.
+  if (pipWin){ window.open(aiUrl, '_blank', 'noopener,noreferrer'); return; }
+  const frame = $('aiFrame');
+  if (!frame.getAttribute('src')) frame.src = aiUrl;
+  $('aiPanel').classList.add('show');
+}
+$('aiBtn').onclick = e => { e.stopPropagation(); showAi(); };
+$('aiClose').onclick = () => $('aiPanel').classList.remove('show');
+$('aiNewTab').onclick = () => window.open(aiUrl, '_blank', 'noopener,noreferrer');
+$('aiPanel').addEventListener('click', e => { if(e.target === $('aiPanel')) $('aiPanel').classList.remove('show'); });
 $('micBtn').onclick = () => listening ? stopListening() : startListening();
 $('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
 $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
