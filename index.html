@@ -176,7 +176,7 @@ textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1
   padding:10px 16px;border-radius:12px;font-size:14px;z-index:30;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
 /* Aviso de actualización disponible */
-#updateBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:31;
+#updateBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:95;
   display:flex;align-items:center;gap:10px;background:#1b1b1e;color:var(--ink);border-radius:999px;padding:6px 6px 6px 16px;font-size:14px;
   box-shadow:0 8px 30px rgba(0,0,0,.4);white-space:nowrap;max-width:calc(100vw - 32px)}
 #updateBar.hide{display:none}
@@ -1541,12 +1541,15 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   navigator.serviceWorker.addEventListener('message', e => {
     if (!e.data || e.data.type !== 'app-updated') return;
     let done = false; try { done = Date.now() - (+sessionStorage.getItem('pv2_reloaded') || 0) < 15000; } catch(_){}
-    if (recSession || listening || done){ toast('Hay una versión nueva de TexJAHC: se aplica la próxima vez que la abras'); if (recSession || listening) showUpdateBar(); return; }
+    if (updBusy() || done){ toast('Hay una versión nueva de TexJAHC: se aplica la próxima vez que la abras'); if (updBusy()) showUpdateBar(); return; }
     try { sessionStorage.setItem('pv2_reloaded', String(Date.now())); } catch(_){}
     location.reload();
   });
 
-  // Aviso con botón para aplicar la actualización cuando estás ocupado (grabando o con la voz activa)
+  // Ocupado = grabando, voz activa, chat con IA abierto o guía inicial abierta: no se recarga sola
+  function updBusy(){ const open = id => { const el = document.getElementById(id); return !!(el && el.classList.contains('show')); };
+    return !!(recSession || listening || open('aiPanel') || open('setupWizard')); }
+  // Aviso con botón para aplicar la actualización cuando estás ocupado
   function showUpdateBar(){ try { $('updateBar').classList.remove('hide'); } catch(_){} }
   $('updateX').onclick = () => $('updateBar').classList.add('hide');
   $('updateBtn').onclick = () => {
