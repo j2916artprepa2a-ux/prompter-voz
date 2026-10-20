@@ -196,9 +196,46 @@ body.pip{background:#000}
 #stylePrev .cur{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:.2em}
 #styleBtn{font:700 11px/1 system-ui,sans-serif;color:rgba(255,255,255,.55)}
 @media (max-width:600px){#styleBtn{font-size:9px}}
+/* Acceso a la IA web: conserva el teleprompter y sus funciones actuales. */
+#aiBtn{width:auto;min-width:51px;padding:0 4px;font-size:12px;font-weight:700;color:#ffd34d;white-space:nowrap}
+#aiPanel{position:fixed;z-index:31;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px}
+#aiPanel.show{display:flex}
+#aiCard{background:#161619;border:1px solid #36363a;border-radius:18px;width:min(92vw,860px);height:min(88vh,760px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009}
+#aiHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;font-size:16px;font-weight:700}
+#aiActions{display:flex;gap:8px}
+#aiActions button{background:#29292d;border:0;border-radius:9px;padding:7px 12px;cursor:pointer;font-size:14px}
+#aiFrame{border:0;flex:1;width:100%;background:#fff}
+#aiHint{font-size:12px;padding:7px 16px;color:#bbb}
+body.pip #aiBtn{min-width:52px}
+
+/* Asistente de primera apertura: permisos explícitos, sin concesiones automáticas */
+#setupWizard{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.94);display:none;align-items:center;justify-content:center;padding:18px;overflow:auto}
+#setupWizard.show{display:flex}
+#setupWizard .setupCard{width:min(100%,510px);background:#17171b;border:1px solid #38383d;border-radius:22px;padding:24px;display:grid;gap:13px;max-height:94vh;overflow:auto}
+#setupWizard h2{margin:0;font-size:23px}#setupWizard p{margin:0;color:#d2d2d5;font-size:14px;line-height:1.5}
+#setupWizard .setupRow{border:1px solid #393940;border-radius:12px;padding:12px;display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:14px}
+#setupWizard .setupRow span{color:#ffd34d;font-size:12px;text-align:right}
+#setupWizard .setupActions{display:flex;flex-wrap:wrap;gap:9px}
+#setupWizard button{border:0;border-radius:12px;background:#35353a;color:#fff;padding:12px 15px;font:600 14px system-ui;cursor:pointer}
+#setupWizard button.primary{background:#ffd34d;color:#171200}#setupWizard a{color:#ffd34d}
 </style>
 </head>
 <body>
+<div id="setupWizard" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <section class="setupCard">
+    <h2 id="setupTitle">⚙️ Prepara TexJAHC</h2>
+    <p>Una sola guía para comenzar. Tú decides qué permisos conceder; puedes usar el teleprompter sin cámara.</p>
+    <div class="setupRow"><strong>📹 Cámara y 🎙️ micrófono</strong><span id="setupMediaState">Sin revisar</span></div>
+    <div class="setupActions"><button class="primary" id="setupMedia">Solicitar permisos</button><button id="setupSkipMedia">Usar solo texto</button></div>
+    <div class="setupRow"><strong>🤖 Chat con IA</strong><span>Disponible en la web</span></div>
+    <p>La IA se abre desde 🤖 IA. No pongas contraseñas ni claves privadas en ventanas de prueba.</p>
+    <div class="setupRow"><strong>🪟 Cuadrito flotante</strong><span id="setupFloatState">Según tu equipo</span></div>
+    <p id="setupFloatHelp"></p>
+    <div class="setupActions"><button id="setupFloatBtn">Activar flotante</button><button id="setupInstallBtn">Instalar / instrucciones</button></div>
+    <div class="setupActions"><button class="primary" id="setupDone">Entrar a TexJAHC</button><button id="setupLater">Omitir por ahora</button></div>
+    <p>Los permisos del sistema siempre necesitan tu autorización. Puedes volver a esta guía desde Ajustes.</p>
+  </section>
+</div>
 <video id="cam" class="mirror" autoplay playsinline muted></video>
 <div id="perm"><div class="pc">
   <img src="icons/icon-192.png" alt="TexJAHC" style="width:96px;height:96px;border-radius:24px">
@@ -219,11 +256,19 @@ body.pip{background:#000}
     <button class="mini" id="moveBtn" aria-label="Mover el cuadro"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
     <button class="mini" id="styleBtn" aria-label="Color, letra y tamaño">Aa</button>
     <button class="mini" id="farBtn" aria-label="Letra grande"><svg viewBox="0 0 24 24"><path d="M3 19L9 5l6 14M5.5 14h7"/><path d="M17 9v8M14.5 11.5L17 9l2.5 2.5"/></svg></button>
+    <button class="mini" id="aiBtn" title="Abrir chat con IA" aria-label="Abrir chat con IA">🤖 IA</button>
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 </div>
 
+<div id="aiPanel" role="dialog" aria-modal="true" aria-label="Chat con IA de TexJAHC">
+  <div id="aiCard">
+    <div id="aiHead"><span>🤖 Chat con IA de TexJAHC</span><div id="aiActions"><button id="aiNewTab" type="button">Abrir aparte ↗</button><button id="aiClose" type="button" aria-label="Cerrar chat">✕</button></div></div>
+    <div id="aiHint">Este botón abre el chat web que ya existe en el proyecto. Las opciones de voz dependen de ese chat y del navegador.</div>
+    <iframe id="aiFrame" title="Asistente TexJAHC" allow="microphone" loading="lazy"></iframe>
+  </div>
+</div>
 <div id="segBar"></div>
 <div id="mergeMsg"><div class="spin"></div><span id="mergeTxt">Uniendo tus clips…</span></div>
 <button class="b" id="flipBtn" title="Voltear cámara" aria-label="Voltear cámara">
@@ -268,6 +313,7 @@ body.pip{background:#000}
 <div class="sheet" id="setSheet">
   <div class="card">
     <h2>Ajustes</h2>
+    <button class="pill" id="setupAgain">⚙️ Configuración inicial</button>
     <div class="row"><label for="fs">Tamaño de letra</label><input type="range" id="fs" min="13" max="48" step="1"></div>
     <div class="row"><label>Color y tipo de letra</label><button class="pill" id="openStyle">Aa  Cambiar</button></div>
     <div class="row"><label for="lines">Líneas visibles</label><input type="range" id="lines" min="2" max="8" step="1"></div>
@@ -1184,6 +1230,19 @@ window.addEventListener('pointerup', () => {
   }
 });
 
+// IA: abre el chat web existente del proyecto, sin exponer claves ni alterar el servicio Android.
+const aiUrl = new URL('asistente.html', location.href).href;
+function showAi(){
+  // La ventana Picture-in-Picture mueve el cuadro a otro documento: el chat se abre aparte.
+  if (pipWin){ window.open(aiUrl, '_blank', 'noopener,noreferrer'); return; }
+  const frame = $('aiFrame');
+  if (!frame.getAttribute('src')) frame.src = aiUrl;
+  $('aiPanel').classList.add('show');
+}
+$('aiBtn').onclick = e => { e.stopPropagation(); showAi(); };
+$('aiClose').onclick = () => $('aiPanel').classList.remove('show');
+$('aiNewTab').onclick = () => window.open(aiUrl, '_blank', 'noopener,noreferrer');
+$('aiPanel').addEventListener('click', e => { if(e.target === $('aiPanel')) $('aiPanel').classList.remove('show'); });
 $('micBtn').onclick = () => listening ? stopListening() : startListening();
 $('miniMic').onclick = e => { e.stopPropagation(); $('micBtn').click(); };
 $('miniX').onclick = e => { e.stopPropagation(); prompter.classList.toggle('min'); setTimeout(() => paint(true), 260); };
@@ -1431,11 +1490,46 @@ function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('sho
 window.addEventListener('resize', () => paint(true));
 document.addEventListener('visibilitychange', () => { if (!document.hidden && listening) newRec(); });
 
+
+/* Asistente inicial; conserva versiones Android y web independientes */
+const wizard = $('setupWizard');
+const IS_DESKTOP_SETUP = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+function setupHelp(){
+  $('setupFloatHelp').textContent = IS_ANDROID && !APPB
+    ? 'En Android, una página web no puede aparecer encima de TikTok o la cámara. Para eso instala el APK TexJAHC y autoriza «Mostrar sobre otras apps» desde la configuración del teléfono.'
+    : IS_IOS ? 'iPhone no permite una ventana web flotante sobre otras aplicaciones. Puedes seguir usando el teleprompter dentro de Safari.'
+    : IS_DESKTOP_SETUP ? 'En Windows usa Chrome o Edge. La ventana flotante se abre cuando pulses «Activar flotante» y puede quedar encima de otros programas.'
+    : 'La versión Android instalada gestiona el permiso especial de superposición desde sus propios ajustes.';
+  $('setupFloatBtn').disabled = IS_IOS || (IS_ANDROID && !APPB);
+  $('setupFloatBtn').textContent = IS_DESKTOP_SETUP ? 'Abrir ventana flotante' : 'Activar flotante';
+  $('setupInstallBtn').textContent = IS_ANDROID && !APPB ? 'Instalar APK / ver guía' : 'Ver instrucciones';
+}
+function openSetup(){setupHelp();wizard.classList.add('show');}
+function finishSetup(){wizard.classList.remove('show');store.set('setupDone',true);if(!S.camOn){document.body.classList.add('no-camera');} else {initPerms();}}
+$('setupMedia').onclick=async()=>{
+  try {await askPerms();$('setupMediaState').textContent=camStream?'Autorizados':'No autorizados';}
+  catch(e){$('setupMediaState').textContent='Revisa los permisos del navegador';}
+  // askPerms maneja también la denegación, sin conceder privilegios del sistema.
+};
+$('setupSkipMedia').onclick=()=>{S.camOn=false;store.set('camOn',false);$('camOn').checked=false;$('perm').classList.remove('show');$('setupMediaState').textContent='Modo texto';};
+$('setupFloatBtn').onclick=async()=>{
+  if(IS_DESKTOP_SETUP){
+    try{await togglePip();$('setupFloatState').textContent=pipWin?'Ventana abierta':'No disponible';}
+    catch(e){$('setupFloatState').textContent='Prueba Chrome o Edge';}
+  } else if(APPB){$('setupFloatState').textContent='Abre el flotante desde la app Android';}
+};
+$('setupInstallBtn').onclick=()=>{window.open(new URL('instalar.html',location.href).href,'_blank','noopener');};
+$('setupDone').onclick=finishSetup;
+$('setupLater').onclick=finishSetup;
+$('setupAgain').onclick=()=>{close('setSheet');openSetup();};
+
 applyLook();
 build();
 $('permBtn').onclick = askPerms;
 $('permSkip').onclick = () => { S.camOn = false; store.set('camOn', false); $('camOn').checked = false; $('perm').classList.remove('show'); document.body.classList.add('no-camera'); };
-initPerms();
+if (!store.get('setupDone',false) && !APPB) {
+  document.body.classList.add('no-camera'); openSetup();
+} else { initPerms(); }
 // Si la voz integrada ya está en el cel, se prepara en segundo plano para que grabar sea instantáneo
 try { if (S.engine === 'local' && localStorage.getItem('pv2_voskOk')) setTimeout(() => warmVoice().then(() => setStatus('Lista')).catch(() => {}), 1200); } catch(e){}
 if (!SR) setStatus(IS_IOS ? 'Toca el micrófono (voz integrada)' : 'Sin reconocimiento de voz: abre en Chrome o Edge');
