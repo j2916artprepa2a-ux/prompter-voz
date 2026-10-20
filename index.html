@@ -175,6 +175,13 @@ textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#1d1d20;color:var(--ink);
   padding:10px 16px;border-radius:12px;font-size:14px;z-index:30;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
+/* Aviso de actualización disponible */
+#updateBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:31;
+  display:flex;align-items:center;gap:10px;background:#1b1b1e;color:var(--ink);border-radius:999px;padding:6px 6px 6px 16px;font-size:14px;
+  box-shadow:0 8px 30px rgba(0,0,0,.4);white-space:nowrap;max-width:calc(100vw - 32px)}
+#updateBar.hide{display:none}
+#updateBar span{overflow:hidden;text-overflow:ellipsis}
+#updateBar .pill{padding:8px 14px}
 
 /* ventana flotante (Picture-in-Picture) */
 body.pip #prompter{position:static;transform:none;width:100%;border-radius:0;box-shadow:none;height:100vh;padding:10px 18px 7px}
@@ -329,6 +336,7 @@ body.pip{background:#000}
   <div class="actions"><button class="pill" id="cueRedo">Repetir esta toma</button><button class="pill primary" id="cueGo">Seguir</button></div>
 </div>
 <div id="installBar" class="hide"><span>📲 Instálala como app</span><button class="pill primary" id="installBtn3">Instalar</button><button class="mini" id="installX" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div id="updateBar" class="hide" role="status"><span>✨ Hay una versión nueva de TexJAHC</span><button class="pill primary" id="updateBtn">Actualizar</button><button class="mini" id="updateX" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
 <div id="toast"></div>
 
 <script>
@@ -1439,10 +1447,34 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   navigator.serviceWorker.addEventListener('message', e => {
     if (!e.data || e.data.type !== 'app-updated') return;
     let done = false; try { done = Date.now() - (+sessionStorage.getItem('pv2_reloaded') || 0) < 15000; } catch(_){}
-    if (recSession || listening || done){ toast('Hay una versión nueva de TexJAHC: se aplica la próxima vez que la abras'); return; }
+    if (recSession || listening || done){ toast('Hay una versión nueva de TexJAHC: se aplica la próxima vez que la abras'); if (recSession || listening) showUpdateBar(); return; }
     try { sessionStorage.setItem('pv2_reloaded', String(Date.now())); } catch(_){}
     location.reload();
   });
+
+  // Aviso con botón para aplicar la actualización cuando estás ocupado (grabando o con la voz activa)
+  function showUpdateBar(){ try { $('updateBar').classList.remove('hide'); } catch(_){} }
+  $('updateX').onclick = () => $('updateBar').classList.add('hide');
+  $('updateBtn').onclick = () => {
+    if (recSession || listening){ toast('Termina de grabar o detén la voz y vuelve a tocar «Actualizar»'); return; }
+    try { sessionStorage.setItem('pv2_reloaded', String(Date.now())); } catch(_){}
+    navigator.serviceWorker.getRegistration().then(r => { if (r && r.waiting) r.waiting.postMessage('skip-waiting'); })
+      .catch(()=>{}).finally(() => location.reload());
+  };
+
+  // Buscar versión nueva aunque la app se quede abierta mucho tiempo (PWA instalada en Windows o Android)
+  const checkUpdate = () => {
+    if (document.hidden || !navigator.onLine) return;
+    navigator.serviceWorker.getRegistration().then(r => {
+      if (!r) return;
+      r.update().catch(()=>{});
+      const sw = navigator.serviceWorker.controller || r.active;
+      if (sw) sw.postMessage('check-update');
+    }).catch(()=>{});
+  };
+  setInterval(checkUpdate, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+  window.addEventListener('online', checkUpdate);
 }
 })();
 </script>

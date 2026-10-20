@@ -1,12 +1,13 @@
 // TexJAHC — service worker
 // Objetivo: abrir al instante, gastar cero datos después de la primera vez
 // y actualizarse sola cuando hay versión nueva.
-const APP = 'texjahc-app-v23';      // la app
+const APP = 'texjahc-app-v24';      // la app (súbele el número si cambias este archivo)
 const LIB = 'prompter-lib-v1';       // librerías pesadas (vosk.js, ffmpeg): se bajan UNA vez y se quedan
 const CORE = ['./', 'index.html', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP).then(c => c.addAll(CORE)));
+  // cache:'reload' = siempre la versión publicada en GitHub Pages, nunca una copia vieja del navegador
+  e.waitUntil(caches.open(APP).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -27,7 +28,27 @@ const notifyUpdate = () => {
 // la página pregunta al abrir: "¿hay versión nueva?"
 self.addEventListener('message', e => {
   if (e.data === 'hello' && pendingUpdate && e.source) e.source.postMessage({ type: 'app-updated' });
+  if (e.data === 'skip-waiting') self.skipWaiting();
+  if (e.data === 'check-update') e.waitUntil(checkForUpdate());
 });
+
+// Revisa en GitHub Pages si index.html cambió (para la app que se queda abierta mucho tiempo)
+let checking = null;
+const checkForUpdate = () => checking || (checking = (async () => {
+  try {
+    const c = await caches.open(APP);
+    const old = (await c.match('./')) || (await c.match('index.html'));
+    const res = await fetch('index.html', { cache: 'no-store' });
+    if (!res.ok) return;
+    const newT = await res.clone().text();
+    const oldT = old ? await old.text() : null;
+    if (oldT === newT) return;
+    const hdr = { headers: { 'Content-Type': 'text/html; charset=utf-8' } };
+    await c.put('./', new Response(newT, hdr));
+    await c.put('index.html', new Response(newT, hdr));
+    if (oldT !== null) notifyUpdate();
+  } catch (_) {} finally { checking = null; }
+})());
 
 self.addEventListener('fetch', e => {
   const req = e.request;
