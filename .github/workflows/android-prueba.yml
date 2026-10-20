@@ -1,0 +1,46 @@
+name: App Android (prueba, no publica)
+# Solo compila para comprobar que el código Android funciona en la rama de prueba.
+# NO crea release, NO sube APK a descargas/ y NO toca main.
+# El APK queda como "artifact" descargable en la pestaña Actions (se borra solo en 7 días).
+on:
+  push:
+    branches: [texjahc-configuracion-prueba]
+    paths: ['android/**', '.github/workflows/android-prueba.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-prueba
+  cancel-in-progress: true
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compilar APK de prueba
+        run: |
+          set -o pipefail
+          gradle -p android assembleRelease --stacktrace --no-daemon 2>&1 | tee build.log
+      - name: Guardar APK de prueba (no se publica)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TexJAHC-prueba-apk
+          path: |
+            android/app/build/outputs/apk/normal/release/app-normal-release.apk
+            android/app/build/outputs/apk/live/release/app-live-release.apk
+          retention-days: 7
+      - name: Guardar log si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-compilacion
+          path: build.log
+          retention-days: 7

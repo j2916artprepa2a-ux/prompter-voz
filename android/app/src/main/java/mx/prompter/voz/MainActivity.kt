@@ -306,6 +306,13 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 8)
             } else openAppInfo("Permisos › Micrófono › Permitir")
         })
+        list.add(Step("Cámara", "Para grabar tu video dentro de TexJAHC con el texto encima.",
+            { checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED }) {
+            if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) || !prefs.getBoolean("askedCam", false)) {
+                prefs.edit().putBoolean("askedCam", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), 8)
+            } else openAppInfo("Permisos › Cámara › Permitir")
+        })
         if (Build.VERSION.SDK_INT >= 33) list.add(Step("Notificaciones", "Android la pide para que el cuadrito no se cierre solo.",
             { checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED }) {
             if (!prefs.getBoolean("askedNotif", false)) {

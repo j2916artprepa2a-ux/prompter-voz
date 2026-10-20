@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -238,6 +239,9 @@ class OverlayService : Service(), RecognitionListener {
         row.addView(move)
         row.addView(status, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         listOf(modeBtn, playBtn, ai, restart, smaller, bigger, close).forEach { row.addView(it) }
+        // ◢ cambiar tamaño: arrastra a los lados = ancho, arriba/abajo = líneas. Doble toque = tamaño normal
+        val grip = btn("◢") {}
+        row.addView(grip)
         box.addView(row)
 
         params = WindowManager.LayoutParams(
@@ -257,19 +261,66 @@ class OverlayService : Service(), RecognitionListener {
 
         // Arrastrar con ✥ (también se puede arrastrar desde el texto con el dedo)
         var sx = 0; var sy = 0; var tx = 0f; var ty = 0f
+        var moved = false; var lastTapMove = 0L
         move.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { sx = params.x; sy = params.y; tx = e.rawX; ty = e.rawY; true }
+                MotionEvent.ACTION_DOWN -> { sx = params.x; sy = params.y; tx = e.rawX; ty = e.rawY; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - tx) > dp(3) || abs(e.rawY - ty) > dp(3)) moved = true
                     params.x = sx + (e.rawX - tx).toInt(); params.y = sy + (e.rawY - ty).toInt()
-                    wm?.updateViewLayout(box, params); true
+                    keepOnScreen(); true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    prefs.edit().putInt(Prefs.X, params.x).putInt(Prefs.Y, params.y).apply(); true
+                    val now = System.currentTimeMillis()
+                    if (!moved && e.action == MotionEvent.ACTION_UP && now - lastTapMove < 350) {
+                        // doble toque en ✥: regresa arriba, donde estaba al principio
+                        val (sw, _) = screenSize()
+                        params.x = (sw * 0.04).toInt(); params.y = dp(40); lastTapMove = 0L
+                        status.text = "Cuadrito regresó arriba"
+                    } else lastTapMove = if (moved) 0L else now
+                    keepOnScreen(save = true); true
                 }
                 else -> false
             }
         }
+        var gw = 0; var gLines = 4; var gx = 0f; var gy = 0f
+        var gMoved = false; var lastTapGrip = 0L
+        grip.setOnTouchListener { _, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    gw = if (params.width > 0) params.width else box.width
+                    gLines = maxOf(3, prefs.getInt(Prefs.LINES, 4)); gx = e.rawX; gy = e.rawY; gMoved = false; true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - gx) > dp(3) || abs(e.rawY - gy) > dp(3)) gMoved = true
+                    val (sw, _) = screenSize()
+                    params.width = (gw + (e.rawX - gx).toInt()).coerceIn(dp(180), maxOf(dp(180), sw - params.x))
+                    val lh = maxOf(1, tv.lineHeight)
+                    val lines = (gLines + ((e.rawY - gy) / lh).toInt()).coerceIn(3, 10)
+                    if (lines != prefs.getInt(Prefs.LINES, 4)) {
+                        prefs.edit().putInt(Prefs.LINES, lines).apply()
+                        setFont(fontSp)   // recalcula el alto con las líneas nuevas
+                    }
+                    keepOnScreen(); true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val now = System.currentTimeMillis()
+                    if (!gMoved && e.action == MotionEvent.ACTION_UP && now - lastTapGrip < 350) {
+                        val (sw, _) = screenSize()
+                        params.width = (sw * 0.92).toInt(); lastTapGrip = 0L
+                        prefs.edit().putInt(Prefs.LINES, 4).apply(); setFont(fontSp)
+                        status.text = "Tamaño normal"
+                    } else {
+                        lastTapGrip = if (gMoved) 0L else now
+                        if (!gMoved) status.text = "Arrastra ◢ para cambiar el tamaño"
+                    }
+                    keepOnScreen(save = true); true
+                }
+                else -> false
+            }
+        }
+        // Si el cuadrito crece (panel de IA, letra más grande), se acomoda para no salirse de la pantalla
+        box.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> keepOnScreen() }
         // Tocar una palabra = brincar ahí
         tv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_UP) {
@@ -282,6 +333,39 @@ class OverlayService : Service(), RecognitionListener {
         w.addView(box, params)
         root = box
         reload()
+        box.post { keepOnScreen() }
+    }
+
+    /** Tamaño de la pantalla actual (cambia al girar el cel). */
+    private fun screenSize(): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= 30) {
+            try { wm?.currentWindowMetrics?.bounds?.let { return it.width() to it.height() } } catch (_: Exception) {}
+        }
+        val dm = resources.displayMetrics
+        return dm.widthPixels to dm.heightPixels
+    }
+
+    /** Mantiene el cuadrito completo dentro de la pantalla; con save=true guarda posición y tamaño. */
+    private fun keepOnScreen(save: Boolean = false) {
+        val box = root ?: return
+        if (!::params.isInitialized) return
+        val (sw, sh) = screenSize()
+        val ow = params.width; val ox = params.x; val oy = params.y
+        if (params.width > sw) params.width = sw
+        val bw = if (params.width > 0) params.width else box.width
+        val bh = if (box.height > 0) box.height else box.measuredHeight
+        params.x = params.x.coerceIn(0, maxOf(0, sw - bw))
+        params.y = params.y.coerceIn(0, maxOf(0, sh - bh))
+        if (params.width != ow || params.x != ox || params.y != oy || save) {
+            try { wm?.updateViewLayout(box, params) } catch (_: Exception) {}
+        }
+        if (save) prefs.edit().putInt(Prefs.X, params.x).putInt(Prefs.Y, params.y).putInt(Prefs.WIDTH, params.width).apply()
+    }
+
+    // Al girar el cel, el cuadrito se reacomoda dentro de la pantalla nueva
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        root?.post { keepOnScreen() }
     }
 
     // El panel de IA es independiente del seguidor: no modifica follower.pos ni scrollY.
