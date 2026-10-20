@@ -218,6 +218,30 @@ body.pip #aiBtn{min-width:52px}
 #setupWizard .setupActions{display:flex;flex-wrap:wrap;gap:9px}
 #setupWizard button{border:0;border-radius:12px;background:#35353a;color:#fff;padding:12px 15px;font:600 14px system-ui;cursor:pointer}
 #setupWizard button.primary{background:#ffd34d;color:#171200}#setupWizard a{color:#ffd34d}
+/* Guía: estado real, prueba de cámara/micrófono y de grabación */
+#setupWizard .setupRow span.ok{color:#8be59b}#setupWizard .setupRow span.bad{color:#ff8a80}
+#setupWizard button:disabled{opacity:.45;cursor:default}
+#setupTest{display:none;gap:10px;align-items:center;background:#0f0f12;border:1px solid #2c2c31;border-radius:12px;padding:10px}
+#setupTest.show{display:flex}
+#setupPrev{width:96px;height:72px;border-radius:9px;background:#222;object-fit:cover;flex:0 0 auto}
+#setupPrev.mirror{transform:scaleX(-1)}
+#setupTestInfo{flex:1;display:grid;gap:7px;font-size:13px;color:#d2d2d5;min-width:0}
+#setupMeter{height:8px;border-radius:5px;background:#2a2a2f;overflow:hidden}
+#setupMeter i{display:block;height:100%;width:0;background:#8be59b;transition:width .08s}
+#setupHelp{font-size:13px!important;color:#ffd34d!important;display:none}
+#setupHelp.show{display:block}
+#setupResult{font-size:13px!important;line-height:1.55!important;display:none;white-space:pre-line}
+#setupResult.show{display:block}
+/* Botón reintentar cuando la cámara no abre */
+#nocam .retry{margin-top:14px;background:#ffd34d;color:#171200;border:0;border-radius:12px;padding:10px 16px;font:600 14px system-ui;cursor:pointer}
+#nocam{flex-direction:column}
+/* Esquina para cambiar el tamaño del cuadro de texto */
+#resizeGrip{position:absolute;right:2px;bottom:2px;width:22px;height:22px;border:0;background:none;padding:0;cursor:nwse-resize;touch-action:none;
+  color:rgba(255,255,255,.35);display:grid;place-items:end;z-index:2}
+#resizeGrip svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+body.resizing #prompter{transition:none;box-shadow:0 0 0 2px #ffd34d,0 16px 40px rgba(0,0,0,.5)}
+body.pip #resizeGrip,body.tilted #resizeGrip,#prompter.min #resizeGrip{display:none}
+body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,600px),calc(100vw - 8px))!important}
 </style>
 </head>
 <body>
@@ -227,11 +251,18 @@ body.pip #aiBtn{min-width:52px}
     <p>Una sola guía para comenzar. Tú decides qué permisos conceder; puedes usar el teleprompter sin cámara.</p>
     <div class="setupRow"><strong>📹 Cámara y 🎙️ micrófono</strong><span id="setupMediaState">Sin revisar</span></div>
     <div class="setupActions"><button class="primary" id="setupMedia">Solicitar permisos</button><button id="setupSkipMedia">Usar solo texto</button></div>
+    <p id="setupHelp" role="alert"></p>
+    <div id="setupTest"><video id="setupPrev" class="mirror" autoplay playsinline muted></video>
+      <div id="setupTestInfo"><span id="setupTestTxt">Habla para probar el micrófono</span><div id="setupMeter"><i></i></div></div></div>
+    <div class="setupActions"><button id="setupTestBtn">🔍 Probar cámara y micrófono</button><button id="setupRecTest">⏺️ Probar grabación (5 s)</button><button id="setupRetry" class="hide">↻ Reintentar</button></div>
+    <p id="setupResult"></p>
     <div class="setupRow"><strong>🤖 Chat con IA</strong><span>Disponible en la web</span></div>
     <p>La IA se abre desde 🤖 IA. No pongas contraseñas ni claves privadas en ventanas de prueba.</p>
     <div class="setupRow"><strong>🪟 Cuadrito flotante</strong><span id="setupFloatState">Según tu equipo</span></div>
     <p id="setupFloatHelp"></p>
     <div class="setupActions"><button id="setupFloatBtn">Activar flotante</button><button id="setupInstallBtn">Instalar / instrucciones</button></div>
+    <div class="setupRow"><strong>📲 Instalar TexJAHC</strong><span id="setupInstallState">Revisando…</span></div>
+    <div class="setupActions"><button id="setupInstallNow" class="hide">📲 Instalar ahora</button><button id="setupApkBtn" class="hide">⬇️ Descargar app Android (APK)</button></div>
     <div class="setupActions"><button class="primary" id="setupDone">Entrar a TexJAHC</button><button id="setupLater">Omitir por ahora</button></div>
     <p>Los permisos del sistema siempre necesitan tu autorización. Puedes volver a esta guía desde Ajustes.</p>
   </section>
@@ -260,6 +291,7 @@ body.pip #aiBtn{min-width:52px}
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
+  <button id="resizeGrip" aria-label="Cambiar tamaño del cuadro" title="Arrastra para cambiar el tamaño · doble toque para regresarlo"><svg viewBox="0 0 24 24"><path d="M20 10L10 20M20 16l-4 4"/></svg></button>
 </div>
 
 <div id="aiPanel" role="dialog" aria-modal="true" aria-label="Chat con IA de TexJAHC">
@@ -921,6 +953,7 @@ async function askPerms(){
     $('perm').classList.remove('show');
   }catch(err){
     $('permMsg').innerHTML = 'No se dio el permiso. Toca el candado 🔒 junto a la dirección → Permisos → activa <b>Cámara</b> y <b>Micrófono</b>, y vuelve a intentar.';
+    try { const m = mediaErrorHelp(err, 'cámara y micrófono'); if (m.kind !== 'denied') $('permMsg').textContent = m.text; lastMediaErr = m; } catch(_){}
   }
 }
 async function initPerms(){
@@ -956,6 +989,7 @@ async function startCam(){
   }catch(err){
     document.body.classList.add('no-camera');
     $('nocam').innerHTML = 'No pude abrir la cámara.<br>Revisa el permiso de cámara en el navegador.';
+    try { showCamError(err); } catch(_){}
   }
 }
 function stopCam(){
@@ -1187,7 +1221,19 @@ async function togglePip(){
     toast('La ventana flotante funciona en Chrome o Edge de computadora.'); return;
   }
   const h = Math.round(fsEff() * 1.32 * S.lines + 52);
-  pipWin = await documentPictureInPicture.requestWindow({ width: Math.min(900, screen.availWidth*0.6|0), height: h });
+  const pipSaved = store.get('pipSize', null);
+  try {
+    pipWin = await documentPictureInPicture.requestWindow(pipSaved && pipSaved.w > 120 && pipSaved.h > 60
+      ? { width: Math.min(pipSaved.w, screen.availWidth), height: Math.min(pipSaved.h, screen.availHeight) }
+      : { width: Math.min(900, screen.availWidth*0.6|0), height: h });
+  } catch(err){
+    pipWin = null;
+    toast('No se pudo abrir la ventana flotante. Toca otra vez el botón (Chrome o Edge de computadora).');
+    throw err;
+  }
+  // recuerda el tamaño que le des a la ventana flotante
+  let pipT = 0;
+  pipWin.addEventListener('resize', () => { clearTimeout(pipT); pipT = setTimeout(() => { try { store.set('pipSize', { w: pipWin.innerWidth, h: pipWin.innerHeight }); } catch(_){} }, 300); });
   const st = document.querySelector('style').cloneNode(true);
   pipWin.document.head.appendChild(st);
   pipWin.document.body.classList.add('pip');
@@ -1251,7 +1297,7 @@ $('recBtn').onclick = toggleRec;
 $('doneBtn').onclick = finishRec;
 $('undoBtn').onclick = undoClip;
 $('flipBtn').onclick = flipCam;
-$('pipBtn').onclick = togglePip;
+$('pipBtn').onclick = () => togglePip().catch(() => {});
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 
 function open(id){ $(id).classList.add('open'); }
@@ -1368,7 +1414,10 @@ function placeFree(){
   const st = prompter.style, r = prompter.getBoundingClientRect();
   const w = r.width, h = r.height;
   const cx = Math.min(Math.max(S.free.x * innerWidth, w / 2 + 4), innerWidth - w / 2 - 4);
-  const cy = Math.min(Math.max(S.free.y * innerHeight, h / 2 + 4), innerHeight - h / 2 - 4);
+  // no se mete debajo de la barra de botones de abajo (para que se vea todo y no tape los botones)
+  const barEl = document.getElementById('bar'), barTop = barEl ? barEl.getBoundingClientRect().top : innerHeight;
+  const maxY = Math.max(h / 2 + 4, Math.min(innerHeight, barTop + 8) - h / 2 - 4);
+  const cy = Math.min(Math.max(S.free.y * innerHeight, h / 2 + 4), maxY);
   st.left = cx + 'px'; st.top = cy + 'px'; st.transform = 'translate(-50%,-50%)';
 }
 (() => {
@@ -1504,8 +1553,8 @@ function setupHelp(){
   $('setupFloatBtn').textContent = IS_DESKTOP_SETUP ? 'Abrir ventana flotante' : 'Activar flotante';
   $('setupInstallBtn').textContent = IS_ANDROID && !APPB ? 'Instalar APK / ver guía' : 'Ver instrucciones';
 }
-function openSetup(){setupHelp();wizard.classList.add('show');}
-function finishSetup(){wizard.classList.remove('show');store.set('setupDone',true);if(!S.camOn){document.body.classList.add('no-camera');} else {initPerms();}}
+function openSetup(){setupHelp();wizard.classList.add('show');try{refreshSetupStates();}catch(_){}}
+function finishSetup(){try{stopSetupTest();}catch(_){}wizard.classList.remove('show');store.set('setupDone',true);if(!S.camOn){document.body.classList.add('no-camera');} else {initPerms();}}
 $('setupMedia').onclick=async()=>{
   try {await askPerms();$('setupMediaState').textContent=camStream?'Autorizados':'No autorizados';}
   catch(e){$('setupMediaState').textContent='Revisa los permisos del navegador';}
@@ -1522,6 +1571,236 @@ $('setupInstallBtn').onclick=()=>{window.open(new URL('instalar.html',location.h
 $('setupDone').onclick=finishSetup;
 $('setupLater').onclick=finishSetup;
 $('setupAgain').onclick=()=>{close('setSheet');openSetup();};
+
+/* ================= Guía inicial: estado real, pruebas y reintentar ================= */
+let lastMediaErr = null;
+// Explica cada error de cámara/micrófono con su solución
+function mediaErrorHelp(err, what){
+  const n = (err && err.name) || '';
+  const inApp = /FBAN|FBAV|Instagram|TikTok|musical_ly|Bytedance|WhatsApp|; wv\)/i.test(navigator.userAgent) && !APPB;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    return { kind:'unsupported', text: inApp ? 'Estás dentro de otra app. Abre TexJAHC en Chrome (menú ⋮ → “Abrir en Chrome”) para usar ' + what + '.'
+      : 'Este navegador no da acceso a ' + what + '. Abre TexJAHC en Chrome o Edge.' };
+  if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError')
+    return { kind:'denied', text: APPB ? 'Falta el permiso de ' + what + '. Abre Ajustes del cel → Apps → TexJAHC → Permisos → Permitir, regresa y toca «Reintentar».'
+      : 'Bloqueaste ' + what + '. Toca el candado 🔒 junto a la dirección → Permisos → Permitir, y luego «Reintentar».' };
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError')
+    return { kind:'missing', text: 'No encontré ' + what + '. Si es externo, conéctalo y toca «Reintentar».' };
+  if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError')
+    return { kind:'busy', text: 'Otra app está usando ' + what + ' (Zoom, Meet, Cámara…). Ciérrala y toca «Reintentar».' };
+  return { kind:'other', text: 'No pude abrir ' + what + '. Toca «Reintentar».' };
+}
+// Pantalla sin cámara: motivo + botón Reintentar (reconecta solo la cámara)
+function showCamError(err){
+  const m = mediaErrorHelp(err, 'la cámara'); lastMediaErr = m;
+  const nc = $('nocam');
+  nc.innerHTML = 'No pude abrir la cámara.<br>';
+  const p = document.createElement('span'); p.textContent = m.text; nc.appendChild(p);
+  const b = document.createElement('button'); b.className = 'retry'; b.textContent = '↻ Reintentar';
+  b.onclick = async () => { b.disabled = true; camStream = null; await startCam(); if (camStream){ toast('Cámara lista ✓'); resetNocam(); } else b.disabled = false; };
+  nc.appendChild(b);
+}
+function resetNocam(){ $('nocam').innerHTML = 'Cámara apagada.<br>Modo solo texto: usa “Flotante” para ponerlo encima de tu app de videollamada o grabación.'; }
+
+async function permState(name){
+  try { return (await navigator.permissions.query({ name })).state; } catch(e){ return 'unknown'; }
+}
+function setState(id, txt, cls){ const el = $(id); if (!el) return; el.textContent = txt; el.className = cls || ''; }
+const PERM_TXT = { granted:'✓', denied:'bloqueado', prompt:'pendiente', unknown:'sin revisar' };
+async function refreshSetupStates(){
+  const [cam, mic] = await Promise.all([permState('camera'), permState('microphone')]);
+  const both = cam === 'granted' && mic === 'granted';
+  const any = cam === 'denied' || mic === 'denied';
+  if (!S.camOn && !both) setState('setupMediaState', 'Modo texto', '');
+  else setState('setupMediaState', 'Cámara ' + PERM_TXT[cam] + ' · Micrófono ' + PERM_TXT[mic], both ? 'ok' : any ? 'bad' : '');
+  if (any){
+    const m = mediaErrorHelp({ name:'NotAllowedError' }, cam === 'denied' && mic === 'denied' ? 'la cámara y el micrófono' : cam === 'denied' ? 'la cámara' : 'el micrófono');
+    showSetupHelp(m.text);
+  } else if (both) showSetupHelp('');
+  $('setupMedia').textContent = both ? 'Permisos listos ✓' : 'Solicitar permisos';
+  // Instalación según el dispositivo
+  const apk = IS_ANDROID && !APPB;
+  $('setupApkBtn').classList.toggle('hide', !apk);
+  $('setupInstallNow').classList.toggle('hide', !installEvt || isStandalone() || !!APPB);
+  if (APPB) setState('setupInstallState', 'App Android ✓', 'ok');
+  else if (isStandalone()) setState('setupInstallState', 'Instalada ✓', 'ok');
+  else if (installEvt) setState('setupInstallState', 'Lista para instalar', '');
+  else if (IS_IOS) setState('setupInstallState', 'Safari → Compartir → Agregar a inicio', '');
+  else setState('setupInstallState', apk ? 'Instálala o baja el APK' : 'Desde el menú del navegador', '');
+}
+function showSetupHelp(t){ const h = $('setupHelp'); h.textContent = t || ''; h.classList.toggle('show', !!t); $('setupRetry').classList.toggle('hide', !t); }
+
+// Prueba de cámara y micrófono: vista previa + medidor de volumen (por separado: si uno falla, el otro sigue)
+let setupMeterCtx = null, setupMeterRaf = 0, setupPeak = 0;
+function stopSetupMeter(){
+  cancelAnimationFrame(setupMeterRaf); setupMeterRaf = 0;
+  if (setupMeterCtx){ try { setupMeterCtx.close(); } catch(_){} setupMeterCtx = null; }
+}
+function stopSetupTest(){
+  stopSetupMeter();
+  const pv = $('setupPrev'); if (pv) pv.srcObject = null;
+  $('setupTest').classList.remove('show');
+  releaseMicIfIdle();
+}
+function startSetupMeter(stream){
+  stopSetupMeter(); setupPeak = 0;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
+    setupMeterCtx = new Ctx(); const src = setupMeterCtx.createMediaStreamSource(stream);
+    const an = setupMeterCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+    const buf = new Uint8Array(an.fftSize), bar = $('setupMeter').firstElementChild;
+    const tick = () => {
+      an.getByteTimeDomainData(buf); let m = 0; for (const v of buf) m = Math.max(m, Math.abs(v - 128));
+      const lvl = Math.min(1, m / 64); setupPeak = Math.max(setupPeak, lvl);
+      bar.style.width = Math.round(lvl * 100) + '%';
+      if (setupPeak > .12) $('setupTestTxt').textContent = 'Micrófono ✓ te escucho';
+      setupMeterRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch(_){}
+}
+async function setupTestMedia(){
+  const res = { cam:false, mic:false, errs:[] };
+  const pv0 = $('setupPrev'); pv0.controls = false; pv0.muted = true; if (pv0.src){ URL.revokeObjectURL(pv0.src); pv0.removeAttribute('src'); }
+  $('setupTest').classList.add('show');
+  $('setupTestTxt').textContent = 'Revisando…';
+  {
+    try {
+      if (!camStream){
+        camStream = await navigator.mediaDevices.getUserMedia({ video: camConstraints(), audio:false });
+        video.srcObject = camStream;
+      }
+      S.camOn = true; store.set('camOn', true); $('camOn').checked = true;
+      document.body.classList.remove('no-camera'); $('perm').classList.remove('show'); resetNocam();
+      const pv = $('setupPrev'); pv.srcObject = camStream; pv.classList.toggle('mirror', S.facing === 'user');
+      res.cam = camStream.getVideoTracks().some(t => t.readyState === 'live');
+    } catch(e){ res.errs.push(mediaErrorHelp(e, 'la cámara').text); }
+  }
+  try {
+    const mic = await getMic();
+    res.mic = mic.getAudioTracks().some(t => t.readyState === 'live');
+    startSetupMeter(mic);
+    $('setupTestTxt').textContent = 'Habla: la barra verde debe moverse';
+    fillMics();
+  } catch(e){ res.errs.push(mediaErrorHelp(e, 'el micrófono').text); $('setupTestTxt').textContent = 'Micrófono no disponible'; }
+  showSetupHelp(res.errs.join(' '));
+  await refreshSetupStates();
+  if (res.cam && res.mic) setState('setupMediaState', 'Cámara ✓ · Micrófono ✓', 'ok');
+  return res;
+}
+
+// Prueba de grabación: cámara + audio + teleprompter al mismo tiempo, 5 segundos, no se guarda
+async function setupRecordTest(){
+  if (recSession){ toast('Ya estás grabando.'); return; }
+  const out = $('setupResult'), btn = $('setupRecTest');
+  out.classList.add('show'); out.textContent = 'Preparando prueba…'; btn.disabled = true;
+  try {
+    if (!window.MediaRecorder){ out.textContent = '✗ Este navegador no puede grabar video. Usa Chrome o Edge.'; return; }
+    const r = await setupTestMedia();
+    if (!r.cam || !r.mic){ out.textContent = '✗ Falta ' + (!r.cam && !r.mic ? 'cámara y micrófono' : !r.cam ? 'la cámara' : 'el micrófono') + '. Arréglalo arriba y vuelve a probar.'; return; }
+    const st = new MediaStream([...camStream.getVideoTracks(), ...micStream.getAudioTracks()]);
+    const mime = pickMime(), chunks = [];
+    const rec = new MediaRecorder(st, mime ? { mimeType: mime } : undefined);
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const p0 = pos; setupPeak = 0;
+    // el teleprompter avanza solo durante la prueba para comprobar que todo corre a la vez
+    const adv = setInterval(() => { if (pos < W.length - 1){ pos++; paint(); } }, 450);
+    rec.start(500);
+    for (let s = 5; s > 0; s--){ out.textContent = '⏺️ Grabando prueba… ' + s + ' s · di “uno, dos, tres”'; await new Promise(k => setTimeout(k, 1000)); }
+    await new Promise(k => { rec.onstop = k; rec.stop(); });
+    clearInterval(adv); pos = p0; paint(true);
+    const blob = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] });
+    const hasV = blob.size > 20000, hasA = setupPeak > .12;
+    const voiceOk = S.engine === 'local' ? (() => { try { return !!localStorage.getItem('pv2_voskOk'); } catch(_){ return false; } })() : !!SR;
+    out.textContent =
+      (hasV ? '✓ Video grabado (' + Math.round(blob.size / 1024) + ' KB)' : '✗ El video salió vacío: reintenta o cambia de navegador') + '\n' +
+      (hasA ? '✓ Audio: te escuché' : '⚠️ Audio muy bajo: acércate al micrófono o elige otro en Ajustes') + '\n' +
+      '✓ Teleprompter avanzando mientras grababa' + '\n' +
+      (voiceOk ? '✓ Seguimiento de voz listo' : S.engine === 'local' ? '⚠️ La voz integrada se descargará (~40 MB) la primera vez que toques el micrófono' : '⚠️ Este navegador no tiene voz de Google: usa la voz integrada en Ajustes');
+    const pv = $('setupPrev'); pv.srcObject = null; pv.classList.remove('mirror'); pv.src = URL.createObjectURL(blob); pv.muted = false; pv.controls = true; pv.play().catch(() => {});
+  } catch(e){
+    out.textContent = '✗ La prueba falló: ' + mediaErrorHelp(e, 'la grabación').text;
+  } finally { btn.disabled = false; }
+}
+$('setupTestBtn').onclick = () => setupTestMedia();
+// El botón original de permisos sigue igual; además, al terminar muestra el estado real y el motivo si falló
+(() => {
+  const orig = $('setupMedia').onclick;
+  $('setupMedia').onclick = async e => {
+    lastMediaErr = null;
+    if (orig) await orig.call($('setupMedia'), e);
+    await refreshSetupStates();
+    if (!camStream && lastMediaErr) showSetupHelp(lastMediaErr.text);
+  };
+})();
+$('setupRecTest').onclick = () => setupRecordTest();
+$('setupRetry').onclick = async () => { micStream = null; camStream = null; await setupTestMedia(); };
+$('setupInstallNow').onclick = async () => { await doInstall(); refreshSetupStates(); };
+$('setupApkBtn').onclick = () => { window.open('https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/TexJAHC.apk', '_blank', 'noopener'); };
+// El botón original de instalar: si el navegador ofrece instalar en un toque, lo usa; si no, abre la guía como antes
+(() => {
+  const orig = $('setupInstallBtn').onclick;
+  $('setupInstallBtn').onclick = async e => {
+    if (installEvt && !isStandalone() && !APPB){ await doInstall(); refreshSetupStates(); return; }
+    if (orig) orig.call($('setupInstallBtn'), e);
+  };
+})();
+window.addEventListener('beforeinstallprompt', () => { if (wizard.classList.contains('show')) setTimeout(refreshSetupStates, 0); });
+window.addEventListener('appinstalled', () => { if (wizard.classList.contains('show')) refreshSetupStates(); });
+// Si cambias un permiso en el navegador, se reconecta sola esa parte (sin reiniciar la app)
+['camera', 'microphone'].forEach(name => {
+  try {
+    navigator.permissions.query({ name }).then(ps => {
+      ps.onchange = () => {
+        if (wizard.classList.contains('show')) refreshSetupStates();
+        if (ps.state === 'granted' && name === 'camera' && S.camOn && !camStream){ startCam().then(() => { if (camStream){ resetNocam(); toast('Cámara lista ✓'); } }); }
+        if (ps.state === 'granted' && name === 'microphone') toast('Micrófono listo ✓');
+      };
+    }).catch(() => {});
+  } catch(_){}
+});
+
+/* ================= Cambiar el tamaño del cuadro de texto (esquina ◢) ================= */
+(() => {
+  const g = $('resizeGrip'); let rz = null, lastTap = 0;
+  const savedW = store.get('boxW', 0);
+  if (savedW > 0){ document.documentElement.style.setProperty('--boxw', savedW + 'px'); document.body.classList.add('custom-w'); }
+  g.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTap < 350){   // doble toque: regresa al tamaño normal
+      lastTap = 0; store.set('boxW', 0); document.body.classList.remove('custom-w');
+      document.documentElement.style.removeProperty('--boxw'); applyLook(); toast('Tamaño normal del cuadro'); return;
+    }
+    lastTap = now;
+    const r = prompter.getBoundingClientRect();
+    rz = { x: e.clientX, y: e.clientY, w: r.width, lines: S.lines, moved: false };
+    try { g.setPointerCapture(e.pointerId); } catch(_){}
+  });
+  g.addEventListener('pointermove', e => {
+    if (!rz) return;
+    const dx = e.clientX - rz.x, dy = e.clientY - rz.y;
+    if (!rz.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    rz.moved = true; document.body.classList.add('resizing');
+    // centrado arriba crece hacia los dos lados; libre crece hacia la derecha
+    const k = S.place === 'free' ? 1 : 2;
+    const w = Math.round(Math.min(Math.max(rz.w + dx * k, 180), innerWidth - 8));
+    document.documentElement.style.setProperty('--boxw', w + 'px'); document.body.classList.add('custom-w');
+    const lines = Math.min(8, Math.max(2, rz.lines + Math.round(dy / (fsEff() * 1.32))));
+    if (lines !== S.lines){ S.lines = lines; lnI.value = lines; document.documentElement.style.setProperty('--lines', lines); }
+    if (S.place === 'free') placeFree();
+    paint(true);
+  });
+  const end = () => {
+    if (!rz) return;
+    if (rz.moved){
+      store.set('boxW', Math.round(prompter.getBoundingClientRect().width)); store.set('lines', S.lines);
+      applyLook();
+    } else toast('Arrastra ◢ para cambiar el tamaño · doble toque para regresarlo');
+    rz = null; document.body.classList.remove('resizing');
+  };
+  g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+})();
 
 applyLook();
 build();
