@@ -38,6 +38,8 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 - 🔤 Tamaño de letra, líneas visibles, idioma de voz y modo espejo para cristal de teleprompter.
 - ⌨️ Atajos en la compu: `Espacio` pausa/sigue · `↑ ↓ ← →` mueven · `R` reinicia.
 - 📲 Se instala como app (PWA) y recuerda tu último guion.
+- 🔒 **Tu guion es privado**: empieza vacío, se guarda solo en tu dispositivo, no se manda a la IA y lo puedes eliminar cuando quieras (✏️ → 🗑️).
+- 🔍 **Guía inicial**: revisa permisos, prueba cámara, micrófono y una grabación corta, y te dice cómo arreglar lo que falle.
 
 ## 📲 Cuadrito flotante (app Android)
 
@@ -45,6 +47,7 @@ App nativa que pone tu guion **flotando encima de TikTok, Instagram, Facebook o 
 
 - Arrástralo a donde quieras (✥), cambia tamaño (A− A+), modo voz 🎙 o automático ⏱.
 - Recibe el guion desde la app web: ✏️ → “📲 Mandar al cuadrito flotante”.
+- Si Play Protect bloquea la versión **Live** (usa Accesibilidad), instala la normal: tiene todo lo demás. No apagues Play Protect.
 - **[Descargar TexJAHC.apk](https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/TexJAHC.apk)** (se compila solo con GitHub Actions; código en `android/`).
 
 ## Instalar

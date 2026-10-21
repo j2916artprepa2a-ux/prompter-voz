@@ -2,6 +2,7 @@ package mx.prompter.voz
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -42,13 +43,8 @@ object Prefs {
     const val X = "x"
     const val Y = "y"
     const val WIDTH = "width"
-    const val DEFAULT_SCRIPT =
-        "[Mira a la cámara y sonríe]\n" +
-        "¿Sabías que puedes grabar tus videos sin aprenderte el guion? Hoy te enseño cómo.\n" +
-        "[Muestra tu celular]\n" +
-        "Este cuadrito flota encima de TikTok, Instagram o Facebook y me va siguiendo palabra por palabra.\n" +
-        "[Señala hacia abajo]\n" +
-        "Si te sirvió, sígueme para más tips. ¡Nos vemos!"
+    // Sin guion precargado: el editor empieza vacío (los guiones que ya tengas guardados se respetan)
+    const val DEFAULT_SCRIPT = ""
 }
 
 class MainActivity : Activity() {
@@ -110,6 +106,11 @@ class MainActivity : Activity() {
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
         buildSetup(col)
+        // Probar cámara, micrófono y una grabación corta (abre la guía de la app de grabación)
+        col.addView(pill("🔍  Probar cámara, micrófono y grabación", false) {
+            prefs.edit().putString(Prefs.SCRIPT, script.text.toString()).apply()
+            startActivity(Intent(this, RecordActivity::class.java).putExtra(RecordActivity.EXTRA_PAGE, "#setup"))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         col.addView(pill("🎥  Grabar video aquí (te sigue la voz)", true) {
             prefs.edit().putString(Prefs.SCRIPT, script.text.toString().ifBlank { Prefs.DEFAULT_SCRIPT }).apply()
             startActivity(Intent(this, RecordActivity::class.java))
@@ -137,6 +138,20 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         col.addView(script)
+        // Eliminar el guion guardado (con confirmación). Solo borra el texto de este cel.
+        col.addView(pill("🗑️  Eliminar guion guardado", false) {
+            AlertDialog.Builder(this)
+                .setTitle("¿Eliminar tu guion guardado?")
+                .setMessage("Se borra de este celular y no se puede recuperar. Tus videos no se tocan.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Sí, eliminar") { _, _ ->
+                    prefs.edit().remove(Prefs.SCRIPT).apply()
+                    script.setText("")
+                    if (OverlayService.running) startService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_RELOAD))
+                    Toast.makeText(this, "Guion eliminado", Toast.LENGTH_SHORT).show()
+                }
+                .show()
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
         col.addView(label("¿Cómo avanza el texto?", 14f, true))
         val modes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -163,7 +178,8 @@ class MainActivity : Activity() {
         updateA11yInfo()
         if (BuildConfig.FLAVOR != "live") {
             a11yInfo.text = "Esta es la versión normal. Para intentar que te siga la voz mientras grabas en otra app, " +
-                "instala la versión Live (experimental): Play Protect la bloquea más, hay que pausarlo para instalarla."
+                "puedes probar la versión Live (experimental). Usa Accesibilidad, por eso Play Protect puede bloquear su instalación: " +
+                "si pasa, sigue con esta versión normal. No apagues Play Protect."
             a11yBtn.text = "Descargar versión Live (experimental)"
             a11yBtn.setOnClickListener {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://j2916artprepa2a-ux.github.io/prompter-voz/descargas/TexJAHC-live.apk")))
@@ -192,6 +208,12 @@ class MainActivity : Activity() {
 
         col.addView(pill("▶  Abrir cuadrito flotante", true) { launch() }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+        // Regresa el cuadrito a su lugar y tamaño de inicio
+        col.addView(pill("↺  Restaurar posición y tamaño del cuadrito", false) {
+            prefs.edit().remove(Prefs.X).remove(Prefs.Y).remove(Prefs.WIDTH).putInt(Prefs.LINES, 4).apply()
+            if (OverlayService.running) startService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_RECREATE))
+            Toast.makeText(this, "Cuadrito en su lugar de inicio", Toast.LENGTH_SHORT).show()
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         col.addView(pill("✕  Cerrar cuadrito", false) {
             startService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_STOP))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
@@ -305,6 +327,13 @@ class MainActivity : Activity() {
                 prefs.edit().putBoolean("askedMic", true).apply()
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 8)
             } else openAppInfo("Permisos › Micrófono › Permitir")
+        })
+        list.add(Step("Cámara", "Para grabar tu video dentro de TexJAHC con el texto encima.",
+            { checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED }) {
+            if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) || !prefs.getBoolean("askedCam", false)) {
+                prefs.edit().putBoolean("askedCam", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), 8)
+            } else openAppInfo("Permisos › Cámara › Permitir")
         })
         if (Build.VERSION.SDK_INT >= 33) list.add(Step("Notificaciones", "Android la pide para que el cuadrito no se cierre solo.",
             { checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED }) {

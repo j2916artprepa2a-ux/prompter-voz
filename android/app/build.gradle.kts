@@ -21,10 +21,12 @@ android {
     // Llave fija para que cada versión nueva se instale encima de la anterior
     signingConfigs {
         create("app") {
-            storeFile = file("../keystore.jks")
-            storePassword = "prompter123"
-            keyAlias = "prompter"
-            keyPassword = "prompter123"
+            // Preparado para migrar la firma (docs/SEGURIDAD-FIRMA.md): si existen estas variables
+            // de entorno se usan; si no, se firma EXACTAMENTE igual que siempre.
+            storeFile = file(System.getenv("TEXJAHC_KEYSTORE_PATH") ?: "../keystore.jks")
+            storePassword = System.getenv("TEXJAHC_KEYSTORE_PASSWORD") ?: "prompter123"
+            keyAlias = System.getenv("TEXJAHC_KEY_ALIAS") ?: "prompter"
+            keyPassword = System.getenv("TEXJAHC_KEY_PASSWORD") ?: "prompter123"
         }
     }
 

@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -33,6 +34,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -65,6 +67,11 @@ class OverlayService : Service(), RecognitionListener {
     private lateinit var status: TextView
     private lateinit var playBtn: TextView
     private lateinit var modeBtn: TextView
+    private var progressFill: View? = null   // barra de avance, igual que en la app web
+    private var aiPanel: OverlayAiPanel? = null
+    private var aiWasPlaying = false
+    private var lastCommand = ""
+    private var lastCommandAt = 0L
 
     private var follower = Follower("")
     private var fontSp = 22f
@@ -105,6 +112,7 @@ class OverlayService : Service(), RecognitionListener {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_RECREATE && root != null) {
+            closeAiPanel()
             // pasar el cuadrito a ventana de accesibilidad (o regresarlo a normal)
             setPlaying(false)
             root?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
@@ -211,6 +219,16 @@ class OverlayService : Service(), RecognitionListener {
             addView(tv)
         }
         box.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)))
+        // Barra de avance delgada (como en la web): cuánto del guion llevas
+        val track = FrameLayout(this).apply {
+            background = GradientDrawable().apply { setColor(0x33FFFFFF); cornerRadius = dp(2).toFloat() }
+        }
+        val fill = View(this).apply {
+            background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(2).toFloat() }
+        }
+        track.addView(fill, FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT))
+        progressFill = fill
+        box.addView(track, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(4); bottomMargin = dp(2) })
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -219,6 +237,7 @@ class OverlayService : Service(), RecognitionListener {
         val move = btn("✥") {}
         modeBtn = btn("🎙") { toggleMode() }
         playBtn = btn("▶") { togglePlay() }
+        val ai = btn("🤖 IA") { toggleAiPanel() }
         val restart = btn("↺") { follower.pos = 0; render(true) }
         val smaller = btn("A−") { setFont(fontSp - 2f) }
         val bigger = btn("A+") { setFont(fontSp + 2f) }
@@ -231,7 +250,10 @@ class OverlayService : Service(), RecognitionListener {
         }
         row.addView(move)
         row.addView(status, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        listOf(modeBtn, playBtn, restart, smaller, bigger, close).forEach { row.addView(it) }
+        listOf(modeBtn, playBtn, ai, restart, smaller, bigger, close).forEach { row.addView(it) }
+        // ◢ cambiar tamaño: arrastra a los lados = ancho, arriba/abajo = líneas. Doble toque = tamaño normal
+        val grip = btn("◢") {}
+        row.addView(grip)
         box.addView(row)
 
         params = WindowManager.LayoutParams(
@@ -251,19 +273,66 @@ class OverlayService : Service(), RecognitionListener {
 
         // Arrastrar con ✥ (también se puede arrastrar desde el texto con el dedo)
         var sx = 0; var sy = 0; var tx = 0f; var ty = 0f
+        var moved = false; var lastTapMove = 0L
         move.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { sx = params.x; sy = params.y; tx = e.rawX; ty = e.rawY; true }
+                MotionEvent.ACTION_DOWN -> { sx = params.x; sy = params.y; tx = e.rawX; ty = e.rawY; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - tx) > dp(3) || abs(e.rawY - ty) > dp(3)) moved = true
                     params.x = sx + (e.rawX - tx).toInt(); params.y = sy + (e.rawY - ty).toInt()
-                    wm?.updateViewLayout(box, params); true
+                    keepOnScreen(); true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    prefs.edit().putInt(Prefs.X, params.x).putInt(Prefs.Y, params.y).apply(); true
+                    val now = System.currentTimeMillis()
+                    if (!moved && e.action == MotionEvent.ACTION_UP && now - lastTapMove < 350) {
+                        // doble toque en ✥: regresa arriba, donde estaba al principio
+                        val (sw, _) = screenSize()
+                        params.x = (sw * 0.04).toInt(); params.y = dp(40); lastTapMove = 0L
+                        status.text = "Cuadrito regresó arriba"
+                    } else lastTapMove = if (moved) 0L else now
+                    keepOnScreen(save = true); true
                 }
                 else -> false
             }
         }
+        var gw = 0; var gLines = 4; var gx = 0f; var gy = 0f
+        var gMoved = false; var lastTapGrip = 0L
+        grip.setOnTouchListener { _, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    gw = if (params.width > 0) params.width else box.width
+                    gLines = maxOf(3, prefs.getInt(Prefs.LINES, 4)); gx = e.rawX; gy = e.rawY; gMoved = false; true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - gx) > dp(3) || abs(e.rawY - gy) > dp(3)) gMoved = true
+                    val (sw, _) = screenSize()
+                    params.width = (gw + (e.rawX - gx).toInt()).coerceIn(dp(180), maxOf(dp(180), sw - params.x))
+                    val lh = maxOf(1, tv.lineHeight)
+                    val lines = (gLines + ((e.rawY - gy) / lh).toInt()).coerceIn(3, 10)
+                    if (lines != prefs.getInt(Prefs.LINES, 4)) {
+                        prefs.edit().putInt(Prefs.LINES, lines).apply()
+                        setFont(fontSp)   // recalcula el alto con las líneas nuevas
+                    }
+                    keepOnScreen(); true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val now = System.currentTimeMillis()
+                    if (!gMoved && e.action == MotionEvent.ACTION_UP && now - lastTapGrip < 350) {
+                        val (sw, _) = screenSize()
+                        params.width = (sw * 0.92).toInt(); lastTapGrip = 0L
+                        prefs.edit().putInt(Prefs.LINES, 4).apply(); setFont(fontSp)
+                        status.text = "Tamaño normal"
+                    } else {
+                        lastTapGrip = if (gMoved) 0L else now
+                        if (!gMoved) status.text = "Arrastra ◢ para cambiar el tamaño"
+                    }
+                    keepOnScreen(save = true); true
+                }
+                else -> false
+            }
+        }
+        // Si el cuadrito crece (panel de IA, letra más grande), se acomoda para no salirse de la pantalla
+        box.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> keepOnScreen() }
         // Tocar una palabra = brincar ahí
         tv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_UP) {
@@ -276,6 +345,84 @@ class OverlayService : Service(), RecognitionListener {
         w.addView(box, params)
         root = box
         reload()
+        box.post { keepOnScreen() }
+    }
+
+    /** Tamaño de la pantalla actual (cambia al girar el cel). */
+    private fun screenSize(): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= 30) {
+            try { wm?.currentWindowMetrics?.bounds?.let { return it.width() to it.height() } } catch (_: Exception) {}
+        }
+        val dm = resources.displayMetrics
+        return dm.widthPixels to dm.heightPixels
+    }
+
+    /** Mantiene el cuadrito completo dentro de la pantalla; con save=true guarda posición y tamaño. */
+    private fun keepOnScreen(save: Boolean = false) {
+        val box = root ?: return
+        if (!::params.isInitialized) return
+        val (sw, sh) = screenSize()
+        val ow = params.width; val ox = params.x; val oy = params.y
+        if (params.width > sw) params.width = sw
+        val bw = if (params.width > 0) params.width else box.width
+        val bh = if (box.height > 0) box.height else box.measuredHeight
+        params.x = params.x.coerceIn(0, maxOf(0, sw - bw))
+        params.y = params.y.coerceIn(0, maxOf(0, sh - bh))
+        if (params.width != ow || params.x != ox || params.y != oy || save) {
+            try { wm?.updateViewLayout(box, params) } catch (_: Exception) {}
+        }
+        if (save) prefs.edit().putInt(Prefs.X, params.x).putInt(Prefs.Y, params.y).putInt(Prefs.WIDTH, params.width).apply()
+    }
+
+    // Al girar el cel, el cuadrito se reacomoda dentro de la pantalla nueva
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        root?.post { keepOnScreen() }
+    }
+
+    // El panel de IA es independiente del seguidor: no modifica follower.pos ni scrollY.
+    private fun toggleAiPanel() {
+        if (aiPanel != null) { closeAiPanel(); return }
+        val container = root ?: return
+        aiWasPlaying = playing
+        if (playing) setPlaying(false) // libera el micrófono del seguimiento
+        val panel = OverlayAiPanel(this) { closeAiPanel() }
+        aiPanel = panel
+        container.addView(panel.view)
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        wm?.updateViewLayout(container, params)
+        status.text = "IA abierta · guion conservado"
+    }
+
+    private fun closeAiPanel() {
+        val panel = aiPanel ?: return
+        aiPanel = null
+        panel.close()
+        root?.removeView(panel.view)
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL.inv()
+        root?.let { wm?.updateViewLayout(it, params) }
+        status.text = "Guion en pausa · toca ▶ para seguir"
+        aiWasPlaying = false
+    }
+
+    private fun processVoiceCommand(raw: String): Boolean {
+        val normalized = java.text.Normalizer.normalize(raw.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("[\\u0300-\\u036f]"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+        val match = Regex("(?:texjahc|tex jahc|tex yac|tex yak) (pausa|sigue|atras|mas grande)").find(normalized) ?: return false
+        val cmd = match.groupValues[1]
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cmd == lastCommand && now - lastCommandAt < 1800L) return true
+        lastCommand = cmd; lastCommandAt = now
+        when (cmd) {
+            "pausa" -> setPlaying(false)
+            "sigue" -> if (!playing) setPlaying(true)
+            "atras" -> { follower.pos = (follower.pos - 8).coerceAtLeast(0); render(true) }
+            "mas grande" -> setFont(fontSp + 2f)
+        }
+        return true
     }
 
     private fun reload() {
@@ -286,8 +433,11 @@ class OverlayService : Service(), RecognitionListener {
         setFont(prefs.getInt(Prefs.FONT, 22).toFloat())
         modeBtn.text = if (voice) "🎙" else "⏱"
         setPlaying(false)
-        status.text = if (voice) "Toca ▶ y habla" else "Toca ▶ para empezar"
+        status.text = if (follower.count == 0) "Sin guion: escríbelo en TexJAHC"
+            else if (voice) "Toca ▶ y habla" else "Toca ▶ para empezar"
     }
+
+    private val EMPTY_HINT = "✏️ Escribe tu guion en la app TexJAHC y vuelve a abrir el cuadrito."
 
     // color y tipo de letra elegidos en la app
     private var txtColor = Color.WHITE
@@ -311,6 +461,11 @@ class OverlayService : Service(), RecognitionListener {
 
     // ---------- pintar el texto ----------
     private fun render(jump: Boolean) {
+        if (follower.count == 0 && follower.display.isBlank()) {   // sin guion: solo la indicación
+            tv.text = EMPTY_HINT; scroll.scrollTo(0, 0)
+            progressFill?.let { f -> f.layoutParams = f.layoutParams.apply { width = 0 }; f.requestLayout() }
+            return
+        }
         val sp = SpannableString(follower.display)
         for (r in follower.directions) {
             sp.setSpan(ForegroundColorSpan(0xFFFFD34D.toInt()), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -326,6 +481,14 @@ class OverlayService : Service(), RecognitionListener {
             sp.setSpan(UnderlineSpan(), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         tv.text = sp
+        progressFill?.let { f ->
+            val parent = f.parent as? View
+            parent?.post {
+                val pct = if (follower.count > 0) follower.pos.toFloat() / follower.count else 0f
+                f.layoutParams = f.layoutParams.apply { width = (parent.width * pct.coerceIn(0f, 1f)).toInt() }
+                f.requestLayout()
+            }
+        }
         tv.post {
             val layout = tv.layout ?: return@post
             val line = layout.getLineForOffset(follower.currentOffset().coerceAtMost(follower.display.length))
@@ -356,6 +519,9 @@ class OverlayService : Service(), RecognitionListener {
         playing = on
         playBtn.text = if (on) "⏸" else "▶"
         h.removeCallbacks(tick)
+        if (on && follower.count == 0) {   // sin guion no hay nada que seguir
+            playing = false; playBtn.text = "▶"; status.text = "Sin guion: escríbelo en TexJAHC"; return
+        }
         if (on) {
             if (follower.pos >= follower.count) follower.pos = 0
             errors = 0
@@ -404,6 +570,7 @@ class OverlayService : Service(), RecognitionListener {
         }
         val arr = org.json.JSONArray()
         set.forEach { arr.put(it) }
+        listOf("texjahc", "tex", "jahc", "pausa", "sigue", "atras", "mas", "grande", "regresa", "precio", "fecha").forEach { arr.put(it) }
         arr.put("[unk]")
         return arr.toString()
     }
@@ -520,6 +687,7 @@ class OverlayService : Service(), RecognitionListener {
         if (t.isBlank()) return
         errors = 0
         status.text = "🎙 " + t.trim().split(Regex("\\s+")).takeLast(2).joinToString(" ")
+        if (processVoiceCommand(t)) return
         if (follower.follow(t)) render(false)
     }
 
@@ -575,6 +743,7 @@ class OverlayService : Service(), RecognitionListener {
                 try { getSystemService(android.media.AudioManager::class.java).unregisterAudioRecordingCallback(it) } catch (_: Exception) {}
             }
         }
+        aiPanel?.close(); aiPanel = null
         running = false
         playing = false
         h.removeCallbacksAndMessages(null)
