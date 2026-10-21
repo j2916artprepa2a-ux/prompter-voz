@@ -1749,7 +1749,7 @@ async function setupRecordTest(){
     out.textContent =
       (hasV ? '✓ Video grabado (' + Math.round(blob.size / 1024) + ' KB)' : '✗ El video salió vacío: reintenta o cambia de navegador') + '\n' +
       (hasA ? '✓ Audio: te escuché' : '⚠️ Audio muy bajo: acércate al micrófono o elige otro en Ajustes') + '\n' +
-      '✓ Teleprompter avanzando mientras grababa' + '\n' +
+      (W.length ? '✓ Teleprompter avanzando mientras grababa' : 'ℹ️ Sin guion: escribe uno con ✏️ para probar el teleprompter al grabar') + '\n' +
       (voiceOk ? '✓ Seguimiento de voz listo' : S.engine === 'local' ? '⚠️ La voz integrada se descargará (~40 MB) la primera vez que toques el micrófono' : '⚠️ Este navegador no tiene voz de Google: usa la voz integrada en Ajustes');
     const pv = $('setupPrev'); pv.srcObject = null; pv.classList.remove('mirror'); pv.src = URL.createObjectURL(blob); pv.muted = false; pv.controls = true; pv.play().catch(() => {});
   } catch(e){
