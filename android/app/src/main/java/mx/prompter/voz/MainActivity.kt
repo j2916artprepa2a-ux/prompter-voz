@@ -106,6 +106,11 @@ class MainActivity : Activity() {
             "Tu cuadrito de texto flota encima de TikTok, Instagram, Facebook o la cámara. " +
             "Esas apps graban tu cámara, no tu pantalla: el cuadrito solo lo ves tú.", 14f))
         buildSetup(col)
+        // Las mismas funciones que la app web (IA, grabar, estilo, cuadro…) en un solo menú
+        col.addView(pill("☰  Todas las funciones (cámara, IA y herramientas)", false) {
+            prefs.edit().putString(Prefs.SCRIPT, script.text.toString()).apply()
+            startActivity(Intent(this, RecordActivity::class.java).putExtra(RecordActivity.EXTRA_PAGE, "#todo"))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         // Probar cámara, micrófono y una grabación corta (abre la guía de la app de grabación)
         col.addView(pill("🔍  Probar cámara, micrófono y grabación", false) {
             prefs.edit().putString(Prefs.SCRIPT, script.text.toString()).apply()

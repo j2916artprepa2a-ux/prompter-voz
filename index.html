@@ -235,6 +235,19 @@ body.pip #aiBtn{min-width:52px}
 /* Botón reintentar cuando la cámara no abre */
 #nocam .retry{margin-top:14px;background:#ffd34d;color:#171200;border:0;border-radius:12px;padding:10px 16px;font:600 14px system-ui;cursor:pointer}
 #nocam{flex-direction:column}
+/* Todo TexJAHC (menú con todas las funciones) */
+.card.tools h3{margin:14px 0 8px;font-size:14px;color:var(--ink-dim);font-weight:600}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tbtn{display:flex;align-items:center;gap:10px;text-align:left;border:0;border-radius:14px;background:#1d1d21;padding:12px;cursor:pointer;
+  font-size:20px;line-height:1;min-height:52px}
+.tbtn span{font-size:14px;font-weight:600;line-height:1.25}
+.tbtn:hover,.tbtn:focus-visible{background:#29292e;outline:0}
+body.recording #moreBtn{display:none}
+@media (max-width:420px){#bar{gap:8px}#bar .b:not(.big){width:46px;height:46px}.tgrid{grid-template-columns:1fr 1fr}}
+/* Cámara sin permiso: aviso dentro de la pantalla principal (sin pantalla intermedia) */
+#nocam .camAsk{display:flex;flex-direction:column;gap:10px;align-items:center;margin-top:14px}
+#nocam .camAsk button{border:0;border-radius:12px;padding:10px 16px;font:600 14px system-ui;cursor:pointer}
+#nocam .camAsk .go{background:#ffd34d;color:#171200}#nocam .camAsk .txt{background:none;color:rgba(255,255,255,.55)}
 /* Confirmar eliminar guion */
 #delConfirm{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
 #delConfirm.show{display:flex}
@@ -330,6 +343,8 @@ body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,60
     <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
   <button class="b" id="pipBtn" title="Ventana flotante" aria-label="Ventana flotante">
     <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="8" height="6" rx="1"/></svg></button>
+  <button class="b" id="moreBtn" title="Todo TexJAHC" aria-label="Todas las funciones">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <button class="b" id="setBtn" title="Ajustes" aria-label="Ajustes">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
 </div>
@@ -356,6 +371,47 @@ body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,60
     <h3 id="delTitle">¿Eliminar tu guion guardado?</h3>
     <p>Se borra de este dispositivo y no se puede recuperar. Tus videos no se tocan.</p>
     <div class="actions"><button class="pill" id="delNo">Cancelar</button><button class="pill danger" id="delYes">Sí, eliminar</button></div>
+  </div>
+</div>
+<!-- Todo TexJAHC: cada opción usa el botón original (no duplica funciones) -->
+<div class="sheet" id="toolsSheet">
+  <div class="card tools">
+    <h2>Todo TexJAHC</h2>
+    <h3>✏️ Guion e IA</h3>
+    <div class="tgrid">
+      <button class="tbtn" data-go="edit">✏️<span>Escribir o editar guion</span></button>
+      <button class="tbtn" data-ai="guion">🎬<span>Escribir guion con IA</span></button>
+      <button class="tbtn" data-ai="chat">💬<span>Chat con IA</span></button>
+      <button class="tbtn" data-ai="live">🔴<span>Preparar un live</span></button>
+      <button class="tbtn" data-ai="entrevista">🎤<span>Practicar entrevista</span></button>
+      <button class="tbtn" data-ai="investigar">🔎<span>Investigar un tema</span></button>
+    </div>
+    <h3>🎥 Grabar</h3>
+    <div class="tgrid">
+      <button class="tbtn" data-go="rec">⏺️<span>Grabar video</span></button>
+      <button class="tbtn" data-go="mic">🎙️<span>Seguir mi voz</span></button>
+      <button class="tbtn" data-go="flip">🔄<span>Voltear cámara</span></button>
+      <button class="tbtn" data-go="test">🔍<span>Probar cámara, micrófono y grabación</span></button>
+    </div>
+    <h3>📜 Cuadro de texto</h3>
+    <div class="tgrid">
+      <button class="tbtn" data-go="style">🎨<span>Color, letra y tamaño</span></button>
+      <button class="tbtn" data-go="far">🔠<span>Letra grande (grabar de lejos)</span></button>
+      <button class="tbtn" data-go="move">✥<span>Mover y cambiar tamaño</span></button>
+      <button class="tbtn" data-go="resetbox">↺<span>Restaurar posición y tamaño</span></button>
+      <button class="tbtn" data-go="pip" data-need="pip">🪟<span>Ventana flotante (Windows)</span></button>
+      <button class="tbtn" data-go="start">⏮️<span>Regresar al inicio del guion</span></button>
+    </div>
+    <h3>📲 App y ajustes</h3>
+    <div class="tgrid">
+      <button class="tbtn" data-go="install" data-need="install">📲<span>Instalar como app</span></button>
+      <button class="tbtn" data-go="apk" data-need="apk">🤖<span>App Android con cuadrito flotante</span></button>
+      <button class="tbtn" data-go="guide" data-need="web">📖<span>Guía de instalación</span></button>
+      <button class="tbtn" data-go="setup">⚙️<span>Configuración inicial</span></button>
+      <button class="tbtn" data-go="settings">🛠️<span>Ajustes</span></button>
+    </div>
+    <p class="hint" id="toolsHint"></p>
+    <div class="actions"><button class="pill primary" id="toolsDone">Listo</button></div>
   </div>
 </div>
 <!-- Ajustes -->
@@ -986,7 +1042,7 @@ async function initPerms(){
   let state = 'prompt';
   try{ state = (await navigator.permissions.query({ name:'camera' })).state; }catch(e){}
   if (state === 'granted') startCam();
-  else { document.body.classList.add('no-camera'); $('perm').classList.add('show'); }
+  else { document.body.classList.add('no-camera'); try { showCamAsk(); } catch(_){ $('perm').classList.add('show'); } }
 }
 function camConstraints(){ return { facingMode: { ideal: S.facing }, width:{ ideal:1920 }, height:{ ideal:1080 } }; }
 function applyMirror(){ video.classList.toggle('mirror', S.camFlip && S.facing === 'user'); }
@@ -1836,15 +1892,88 @@ window.addEventListener('appinstalled', () => { if (wizard.classList.contains('s
   g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
 })();
 
+/* ================= Todo TexJAHC: todas las funciones desde la primera pantalla ================= */
+function openAiMode(m){
+  // abre el asistente en la pestaña pedida (guion, live, entrevista, investigar o chat)
+  if (pipWin){ window.open(aiUrl + '#' + m, '_blank', 'noopener,noreferrer'); return; }
+  const frame = $('aiFrame');
+  const pick = () => { try { const t = frame.contentDocument.querySelector('.tab[data-m="' + m + '"]'); if (t){ t.click(); return true; } } catch(_){} return false; };
+  if (!frame.getAttribute('src')) frame.src = aiUrl + '#' + m;
+  else if (!pick()) frame.src = aiUrl + '#' + m;
+  $('aiPanel').classList.add('show');
+}
+const TOOL = {
+  edit:     () => $('editBtn').click(),
+  rec:      () => $('recBtn').click(),
+  mic:      () => $('micBtn').click(),
+  flip:     () => { if (!camStream){ toast('Primero activa la cámara.'); return; } $('flipBtn').click(); },
+  test:     () => { openSetup(); setTimeout(() => $('setupTestBtn').click(), 150); },
+  style:    () => $('openStyle').click(),
+  far:      () => $('farBtn').click(),
+  move:     () => toast('Arrastra ✥ para mover el cuadro y ◢ (esquina) para cambiar su tamaño'),
+  resetbox: () => $('resetBox').click(),
+  pip:      () => $('pipBtn').click(),
+  start:    () => $('resetBtn').click(),
+  install:  () => installEvt ? doInstall() : window.open(new URL('instalar.html', location.href).href, '_blank', 'noopener'),
+  apk:      () => window.open('https://github.com/j2916artprepa2a-ux/prompter-voz/releases/download/android-latest/TexJAHC.apk', '_blank', 'noopener'),
+  guide:    () => window.open(new URL('instalar.html', location.href).href, '_blank', 'noopener'),
+  setup:    () => openSetup(),
+  settings: () => $('setBtn').click(),
+};
+function paintTools(){
+  const show = {
+    pip: 'documentPictureInPicture' in window,
+    install: !isStandalone() && !APPB,
+    apk: IS_ANDROID && !APPB,
+    web: !APPB,
+  };
+  document.querySelectorAll('#toolsSheet [data-need]').forEach(b => b.classList.toggle('hide', !show[b.dataset.need]));
+  $('toolsHint').textContent = IS_DESKTOP_SETUP
+    ? 'Atajos: Espacio = micrófono · ↑ ↓ ← → mueven el texto · R = regresar al inicio.'
+    : IS_ANDROID && !APPB ? 'En el navegador el texto se ve dentro de TexJAHC. Para tenerlo encima de TikTok, Instagram o Facebook usa la app Android.'
+    : '';
+}
+$('moreBtn').onclick = () => { paintTools(); $('toast').classList.remove('show'); open('toolsSheet'); store.set('moreHint', true); };
+// la primera vez que entras a la app, un aviso corto de dónde está todo
+setTimeout(() => { if (!store.get('moreHint', false) && !wizard.classList.contains('show')){ toast('Toca ☰ para ver todas las funciones de TexJAHC'); store.set('moreHint', true); } }, 1800);
+$('toolsDone').onclick = () => close('toolsSheet');
+$('toolsSheet').addEventListener('click', e => {
+  if (e.target === $('toolsSheet')){ close('toolsSheet'); return; }
+  const b = e.target.closest('.tbtn'); if (!b) return;
+  close('toolsSheet');
+  if (b.dataset.ai) openAiMode(b.dataset.ai);
+  else if (TOOL[b.dataset.go]) setTimeout(TOOL[b.dataset.go], 60);
+});
+
+/* Cámara sin permiso: se pide dentro de la pantalla principal, sin pantalla negra intermedia */
+function showCamAsk(){
+  if ($('perm').classList.contains('show')) $('perm').classList.remove('show');
+  document.body.classList.add('no-camera');
+  const nc = $('nocam');
+  nc.innerHTML = 'La cámara está apagada.<br>Puedes usar el teleprompter así, o activarla para grabar.';
+  const box = document.createElement('div'); box.className = 'camAsk';
+  const go = document.createElement('button'); go.className = 'go'; go.textContent = '📷 Permitir cámara y micrófono';
+  go.onclick = async () => { await askPerms(); if (!camStream && lastMediaErr) showCamError({ name: lastMediaErr.kind === 'denied' ? 'NotAllowedError' : lastMediaErr.kind === 'busy' ? 'NotReadableError' : lastMediaErr.kind === 'missing' ? 'NotFoundError' : '' }); else if (camStream) resetNocam(); };
+  const txt = document.createElement('button'); txt.className = 'txt'; txt.textContent = 'Usar solo texto';
+  txt.onclick = () => $('permSkip').click();
+  box.append(go, txt); nc.appendChild(box);
+}
+
 applyLook();
 build();
 $('permBtn').onclick = askPerms;
 $('permSkip').onclick = () => { S.camOn = false; store.set('camOn', false); $('camOn').checked = false; $('perm').classList.remove('show'); document.body.classList.add('no-camera'); };
-if (!store.get('setupDone',false) && !APPB) {
-  document.body.classList.add('no-camera'); openSetup();
-} else { initPerms(); }
+(async () => {
+  if (!store.get('setupDone',false) && !APPB) {
+    const [c, m] = await Promise.all([permState('camera'), permState('microphone')]);
+    if (c === 'granted' && m === 'granted'){ store.set('setupDone', true); initPerms(); return; }   // ya está todo listo: directo a la app
+    document.body.classList.add('no-camera'); openSetup();
+  } else { initPerms(); }
+})();
 // Abrir la guía directo (por ejemplo desde la app Android: «Probar cámara, micrófono y grabación»)
 if (location.hash === '#setup' && !wizard.classList.contains('show')) openSetup();
+// Abrir el menú con todas las funciones (lo usa la app Android: «☰ Todas las funciones»)
+if (location.hash === '#todo') setTimeout(() => { if (!wizard.classList.contains('show')) $('moreBtn').click(); }, 300);
 $('resetBox').onclick = () => {
   S.place = 'camera'; store.set('place', 'camera'); $('place').value = 'camera';
   S.free = { x: .5, y: .3 }; store.set('free', S.free);

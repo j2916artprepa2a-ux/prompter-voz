@@ -4,7 +4,7 @@ name: App Android (prueba, no publica)
 # El APK queda como "artifact" descargable en la pestaña Actions (se borra solo en 7 días).
 on:
   push:
-    branches: [texjahc-configuracion-prueba, texjahc-integral-prueba]
+    branches: [texjahc-configuracion-prueba, texjahc-integral-prueba, texjahc-inicio-prueba]
     paths: ['android/**', '.github/workflows/android-prueba.yml']
   workflow_dispatch:
 permissions:
