@@ -34,6 +34,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -66,6 +67,7 @@ class OverlayService : Service(), RecognitionListener {
     private lateinit var status: TextView
     private lateinit var playBtn: TextView
     private lateinit var modeBtn: TextView
+    private var progressFill: View? = null   // barra de avance, igual que en la app web
     private var aiPanel: OverlayAiPanel? = null
     private var aiWasPlaying = false
     private var lastCommand = ""
@@ -217,6 +219,16 @@ class OverlayService : Service(), RecognitionListener {
             addView(tv)
         }
         box.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)))
+        // Barra de avance delgada (como en la web): cuánto del guion llevas
+        val track = FrameLayout(this).apply {
+            background = GradientDrawable().apply { setColor(0x33FFFFFF); cornerRadius = dp(2).toFloat() }
+        }
+        val fill = View(this).apply {
+            background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(2).toFloat() }
+        }
+        track.addView(fill, FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT))
+        progressFill = fill
+        box.addView(track, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(4); bottomMargin = dp(2) })
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -421,8 +433,11 @@ class OverlayService : Service(), RecognitionListener {
         setFont(prefs.getInt(Prefs.FONT, 22).toFloat())
         modeBtn.text = if (voice) "🎙" else "⏱"
         setPlaying(false)
-        status.text = if (voice) "Toca ▶ y habla" else "Toca ▶ para empezar"
+        status.text = if (follower.count == 0) "Sin guion: escríbelo en TexJAHC"
+            else if (voice) "Toca ▶ y habla" else "Toca ▶ para empezar"
     }
+
+    private val EMPTY_HINT = "✏️ Escribe tu guion en la app TexJAHC y vuelve a abrir el cuadrito."
 
     // color y tipo de letra elegidos en la app
     private var txtColor = Color.WHITE
@@ -446,6 +461,11 @@ class OverlayService : Service(), RecognitionListener {
 
     // ---------- pintar el texto ----------
     private fun render(jump: Boolean) {
+        if (follower.count == 0 && follower.display.isBlank()) {   // sin guion: solo la indicación
+            tv.text = EMPTY_HINT; scroll.scrollTo(0, 0)
+            progressFill?.let { f -> f.layoutParams = f.layoutParams.apply { width = 0 }; f.requestLayout() }
+            return
+        }
         val sp = SpannableString(follower.display)
         for (r in follower.directions) {
             sp.setSpan(ForegroundColorSpan(0xFFFFD34D.toInt()), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -461,6 +481,14 @@ class OverlayService : Service(), RecognitionListener {
             sp.setSpan(UnderlineSpan(), r.first, r.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         tv.text = sp
+        progressFill?.let { f ->
+            val parent = f.parent as? View
+            parent?.post {
+                val pct = if (follower.count > 0) follower.pos.toFloat() / follower.count else 0f
+                f.layoutParams = f.layoutParams.apply { width = (parent.width * pct.coerceIn(0f, 1f)).toInt() }
+                f.requestLayout()
+            }
+        }
         tv.post {
             val layout = tv.layout ?: return@post
             val line = layout.getLineForOffset(follower.currentOffset().coerceAtMost(follower.display.length))
@@ -491,6 +519,9 @@ class OverlayService : Service(), RecognitionListener {
         playing = on
         playBtn.text = if (on) "⏸" else "▶"
         h.removeCallbacks(tick)
+        if (on && follower.count == 0) {   // sin guion no hay nada que seguir
+            playing = false; playBtn.text = "▶"; status.text = "Sin guion: escríbelo en TexJAHC"; return
+        }
         if (on) {
             if (follower.pos >= follower.count) follower.pos = 0
             errors = 0
