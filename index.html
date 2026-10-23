@@ -128,7 +128,7 @@ body.paused #recTime{background:#3a3a3e}
 #flipBtn{position:fixed;right:10px;top:46%;width:42px;height:42px;z-index:8}
 #flipBtn svg{width:20px;height:20px}
 body.no-camera #flipBtn,body.pip #flipBtn{display:none}
-body.recording:not(.paused) #flipBtn{opacity:.35}
+/* voltear funciona también grabando */
 #undoBtn{display:none}
 body.paused #undoBtn.has{display:grid}
 #undoBtn.armed{background:var(--rec);color:#fff}
@@ -1044,12 +1044,13 @@ async function initPerms(){
   if (state === 'granted') startCam();
   else { document.body.classList.add('no-camera'); try { showCamAsk(); } catch(_){ $('perm').classList.add('show'); } }
 }
-function camConstraints(){ return { facingMode: { ideal: S.facing }, width:{ ideal:1920 }, height:{ ideal:1080 } }; }
+let camSizeHint = null;   // al voltear grabando: pide a la otra cámara el mismo tamaño que la anterior
+function camConstraints(){ return { facingMode: { ideal: S.facing }, width:{ ideal: camSizeHint ? camSizeHint.w : 1920 }, height:{ ideal: camSizeHint ? camSizeHint.h : 1080 } }; }
 function applyMirror(){ video.classList.toggle('mirror', S.camFlip && S.facing === 'user'); }
-// Voltear cámara (selfie ⇄ trasera). Grabando, solo en pausa: cada clip queda con una cámara.
+// Voltear cámara (selfie ⇄ trasera). También grabando: ver flipWhileRecording (cada cámara queda como su clip y al final se unen).
 async function flipCam(){
-  if (isRecording()){ toast('Pausa primero para voltear la cámara.'); return; }
   if (recBusyOp) return;
+  if (isRecording()) return flipWhileRecording();
   S.facing = S.facing === 'user' ? 'environment' : 'user'; store.set('facing', S.facing);
   if (camStream){ camStream.getVideoTracks().forEach(t => t.stop()); camStream = null; }
   await startCam();
@@ -1058,6 +1059,37 @@ async function flipCam(){
     recStream = new MediaStream([...camStream.getVideoTracks(), ...recStream.getAudioTracks()]);
   }
   toast(S.facing === 'user' ? 'Cámara de selfie' : 'Cámara trasera');
+}
+/* Voltear la cámara SIN dejar de grabar (frontal ⇄ trasera, cuantas veces quieras).
+   El pedazo grabado hasta ahí se cierra como clip, cambia la cámara y sigue grabando solo;
+   la voz no se detiene. Al terminar, todo se une en un solo video. */
+async function flipWhileRecording(){
+  recBusyOp = true;
+  const oldFacing = S.facing;
+  try {
+    const tr = camStream && camStream.getVideoTracks()[0];
+    const st = tr && tr.getSettings ? tr.getSettings() : {};
+    camSizeHint = st.width && st.height ? { w: st.width, h: st.height } : null;
+    await closeClip();
+    S.facing = S.facing === 'user' ? 'environment' : 'user';
+    if (camStream){ camStream.getVideoTracks().forEach(t => t.stop()); camStream = null; }
+    await startCam();
+    if (!camStream){   // la otra cámara no abrió: regresa a la que estaba y sigue grabando
+      S.facing = oldFacing; await startCam();
+      toast('No pude abrir la otra cámara; sigo grabando con esta.');
+    } else {
+      store.set('facing', S.facing);
+      toast(S.facing === 'user' ? 'Cámara de selfie · sigues grabando' : 'Cámara trasera · sigues grabando');
+    }
+    applyMirror();
+    if (camStream){
+      recStream = new MediaStream([...camStream.getVideoTracks(), ...(recStream ? recStream.getAudioTracks() : [])]);
+      startClip();
+    } else {
+      document.body.classList.add('paused'); setStatus('Pausado');
+      toast('La cámara no respondió. Toca ● para seguir grabando.');
+    }
+  } finally { camSizeHint = null; recBusyOp = false; drawSegs(); }
 }
 async function startCam(){
   if (!S.camOn){ document.body.classList.add('no-camera'); return; }
@@ -1117,7 +1149,8 @@ async function toggleRec(){
 }
 function startClip(){
   const rec = new MediaRecorder(recStream, recMime ? { mimeType: recMime, videoBitsPerSecond: 3.5e6, audioBitsPerSecond: 128000 } : undefined);
-  const c = { rec, chunks: [], dur: 0, posStart: pos };
+  const vt = recStream.getVideoTracks()[0], vs = vt && vt.getSettings ? vt.getSettings() : {};
+  const c = { rec, chunks: [], dur: 0, posStart: pos, vw: vs.width || 0, vh: vs.height || 0, tid: vt ? vt.id : '' };
   rec.ondataavailable = e => { if (e.data && e.data.size) c.chunks.push(e.data); };
   rec.start(1000);
   curClip = c; clipStart = Date.now();
@@ -1193,11 +1226,12 @@ async function finishRec(){
   releaseMicIfIdle();
   const type = (recMime || 'video/webm').split(';')[0];
   const blobs = clips.map(c => new Blob(c.chunks, { type }));
+  const sizes = clips.map(c => [c.vw, c.vh, c.tid]);
   clips = [];
   if (!blobs.length){ toast('No hay nada grabado.'); return; }
   if (blobs.length === 1) return saveVideo(blobs[0], type);
   try {
-    const merged = await mergeVideos(blobs, type);
+    const merged = await mergeVideos(blobs, type, sizes);
     saveVideo(merged, type);
   } catch(e){
     console.error(e);
@@ -1226,7 +1260,7 @@ function loadMerger(){
   return ffmpegLoading;
 }
 function preloadMerger(){ if (ffCached() || !onMobileData()) loadMerger().catch(() => {}); }
-async function mergeVideos(blobs, type){
+async function mergeVideos(blobs, type, sizes){
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
   const cached = ffCached();
   if (!ffmpegInst && !cached && onMobileData() && !confirm('Para unir tus clips necesito una herramienta de video (≈32 MB, solo una vez).\n\n¿Descargarla ahora con datos?\n(Si no, te guardo los clips por separado.)')) throw new Error('sin-datos');
@@ -1242,7 +1276,27 @@ async function mergeVideos(blobs, type){
     }
     await ff.writeFile('l.txt', new TextEncoder().encode(list));
     const out = 'out.' + ext;
-    const code = await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'l.txt', '-c', 'copy', ...(ext === 'mp4' ? ['-movflags', '+faststart'] : []), out]);
+    // Si todos los clips son de la misma cámara se unen sin recomprimir (rápido, como siempre).
+    // Si cambiaste de cámara (frontal ⇄ trasera), cada cámara graba con su propio formato:
+    // se ajustan al tamaño del primero para que el video final salga bien (tarda más).
+    const sz = (sizes || []).filter(z => z && z[0] && z[1]);
+    const mixed = sz.length === blobs.length && sz.some(z => z[0] !== sz[0][0] || z[1] !== sz[0][1] || (z[2] && sz[0][2] && z[2] !== sz[0][2]));
+    let code;
+    if (!mixed){
+      code = await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'l.txt', '-c', 'copy', ...(ext === 'mp4' ? ['-movflags', '+faststart'] : []), out]);
+    } else {
+      $('mergeTxt').textContent = 'Uniendo cámara frontal y trasera… (puede tardar un poco)';
+      const W = sz[0][0] - sz[0][0] % 2, H = sz[0][1] - sz[0][1] % 2, n = blobs.length, args = [];
+      for (let i = 0; i < n; i++) args.push('-i', 'c' + i + '.' + ext);
+      let fc = '';
+      for (let i = 0; i < n; i++) fc += '[' + i + ':v]scale=' + W + ':' + H + ':force_original_aspect_ratio=decrease,pad=' + W + ':' + H + ':(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v' + i + '];';
+      for (let i = 0; i < n; i++) fc += '[v' + i + '][' + i + ':a]';
+      fc += 'concat=n=' + n + ':v=1:a=1[v][a]';
+      const enc = ext === 'mp4'
+        ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart']
+        : ['-c:v', 'libvpx', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '3M', '-c:a', 'libopus'];
+      code = await ff.exec([...args, '-filter_complex', fc, '-map', '[v]', '-map', '[a]', ...enc, out]);
+    }
     if (code !== 0) throw new Error('ffmpeg ' + code);
     const data = await ff.readFile(out);
     for (let i = 0; i < blobs.length; i++) { try { await ff.deleteFile('c' + i + '.' + ext); } catch(e){} }
