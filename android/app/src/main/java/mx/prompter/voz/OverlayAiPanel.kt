@@ -66,6 +66,26 @@ class OverlayAiPanel(
         code.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         code.setTextColor(Color.WHITE); code.setHintTextColor(0xFFAAAAAA.toInt())
         view.addView(code)
+        // Tu IA favorita con tu propia clave (se elige en la app: 🔑)
+        val who = TextView(context).apply { setTextColor(0xFFBBBBBB.toInt()); textSize = 13f }
+        view.addView(who)
+        view.addView(Button(context).apply {
+            text = "🔑 Elegir mi IA y mi clave"
+            setOnClickListener {
+                context.startActivity(Intent(context, RecordActivity::class.java)
+                    .putExtra(RecordActivity.EXTRA_PAGE, "asistente.html#clave")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        })
+        AiClient.config(context).let { c ->
+            if (c != null && c.own && c.ready) {
+                code.visibility = View.GONE
+                who.text = "Contesta: ${c.name} · ${c.model} (tu clave, solo en este cel)"
+            } else {
+                if (c != null && c.code.isNotBlank()) code.setText(c.code)
+                who.text = "Usa tu código de TexJAHC, o toca 🔑 para usar tu IA favorita con tu clave."
+            }
+        }
 
         question.hint = "Escribe tu pregunta o activa el micrófono"
         question.minLines = 2; question.maxLines = 3
@@ -143,6 +163,8 @@ class OverlayAiPanel(
         val q = question.text.toString().trim()
         val access = code.text.toString().trim()
         if (q.isBlank()) { state.text = "Escribe una pregunta primero."; return }
+        val own = AiClient.config(context)?.takeIf { it.own && it.ready }
+        if (own != null) { askOwn(own, q); return }
         if (access.isBlank()) { state.text = "Introduce tu código de acceso a TexJAHC."; return }
         if (busy) return
         stopListening()
@@ -189,6 +211,37 @@ class OverlayAiPanel(
                 answer.text = if (citations.isEmpty()) output else "$output\n\nFuentes:\n$citations"
                 state.text = "Respuesta recibida."
                 if (speak.isChecked) readAloud(output)
+            }
+        }.start()
+    }
+
+    /** Pregunta a la IA favorita de la persona, con su clave (Claude, ChatGPT, Gemini o compatible). */
+    private fun askOwn(c: AiClient.Config, q: String) {
+        if (busy) return
+        stopListening()
+        busy = true; state.text = "Consultando ${c.name}…"; answer.text = ""
+        val sent = JSONArray().also { a ->
+            for (i in 0 until history.length()) a.put(history.getJSONObject(i))
+            a.put(JSONObject().put("role", "user").put("content", q))
+        }
+        Thread {
+            var res: AiClient.Answer? = null
+            var error: String? = null
+            try {
+                res = AiClient.ask(c, sent, search = c.prov != "compat")
+                if (res.text.isBlank()) error = "${c.name} no devolvió respuesta. Intenta otra vez."
+            } catch (e: Exception) { error = e.message ?: "No fue posible consultar la IA. Revisa tu conexión." }
+            val failure = error; val r = res
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (!alive) return@post
+                busy = false
+                if (failure != null || r == null) { state.text = "Error: ${failure ?: "sin respuesta"}"; return@post }
+                history.put(JSONObject().put("role", "user").put("content", q))
+                history.put(JSONObject().put("role", "assistant").put("content", r.text))
+                val cites = r.sources.take(6).joinToString("\n") { "• ${it.first}: ${it.second}" }
+                answer.text = if (cites.isEmpty()) r.text else "${r.text}\n\nFuentes:\n$cites"
+                state.text = "Respuesta de ${c.name}."
+                if (speak.isChecked) readAloud(r.text)
             }
         }.start()
     }

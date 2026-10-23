@@ -39,6 +39,7 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 - ⌨️ Atajos en la compu: `Espacio` pausa/sigue · `↑ ↓ ← →` mueven · `R` reinicia.
 - 📲 Se instala como app (PWA) y recuerda tu último guion.
 - 🔒 **Tu guion es privado**: empieza vacío, se guarda solo en tu dispositivo, no se manda a la IA y lo puedes eliminar cuando quieras (✏️ → 🗑️).
+- 🔑 **Tu IA favorita con tu propia clave**: elige Claude, ChatGPT, Gemini u otra compatible con OpenAI y pega tu clave de API (☰ → 🔑). Se guarda solo en tu dispositivo y va directo a tu IA. También funciona en el 🤖 del cuadrito flotante de Android.
 - ☰ **Todo en un menú**: desde la pantalla principal tienes a la mano guion, IA (guion, chat, live, entrevista, investigar), grabación, estilo, cuadro, ventana flotante, instalación y ajustes.
 - 🔍 **Guía inicial**: revisa permisos, prueba cámara, micrófono y una grabación corta, y te dice cómo arreglar lo que falle.
 

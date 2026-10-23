@@ -163,6 +163,9 @@ class RecordActivity : Activity() {
 
         @JavascriptInterface fun getScript(): String = prefs.getString(Prefs.SCRIPT, "") ?: ""
         @JavascriptInterface fun setScript(t: String) { prefs.edit().putString(Prefs.SCRIPT, t).apply() }
+        /** Tu IA y tu clave (se eligen en 🔑 de la pantalla de IA): las usa también el cuadrito flotante. */
+        @JavascriptInterface fun getAiConfig(): String = prefs.getString(AiClient.PREF, "") ?: ""
+        @JavascriptInterface fun setAiConfig(json: String) { prefs.edit().putString(AiClient.PREF, json).apply() }
 
         /** Guardar el video en la Galería (en partes, porque puede ser grande). */
         @JavascriptInterface fun beginSave(name: String, mime: String): Boolean {

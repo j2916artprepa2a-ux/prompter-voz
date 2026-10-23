@@ -53,11 +53,38 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
 
   <div class="card" id="keyCard">
     <details id="keyBox">
-      <summary id="keySum">🔑 Código de acceso</summary>
-      <label for="key">Escribe tu código de acceso de TexJAHC. Se guarda en este teléfono/compu.</label>
-      <input id="key" type="password" placeholder="Tu código" autocomplete="off">
-      <p class="msg">La clave de Claude vive en el servidor, no aquí. El código solo evita que otros usen tu saldo.</p>
-      <button class="btn sec" id="saveKey">Guardar código</button>
+      <summary id="keySum">🔑 Tu IA</summary>
+      <label for="prov">¿Con qué IA quieres que te conteste?</label>
+      <select id="prov">
+        <option value="claude">Claude (Anthropic)</option>
+        <option value="openai">ChatGPT (OpenAI)</option>
+        <option value="gemini">Gemini (Google)</option>
+        <option value="compat">Otra compatible con OpenAI (DeepSeek, OpenRouter, Groq…)</option>
+        <option value="server">Servidor de TexJAHC (código de acceso)</option>
+      </select>
+      <div id="ownKeyBox">
+        <label for="apiKey" id="apiKeyLbl">Tu clave de API</label>
+        <input id="apiKey" type="password" placeholder="Pega aquí tu clave" autocomplete="off" spellcheck="false">
+        <p class="msg" id="keyHelp"></p>
+        <div id="baseBox" class="hide">
+          <label for="aiBase">Dirección de la API (termina en /v1)</label>
+          <input id="aiBase" type="url" placeholder="https://api.deepseek.com/v1" autocomplete="off" spellcheck="false">
+        </div>
+        <label for="aiModel">Modelo (déjalo vacío para usar el recomendado)</label>
+        <input id="aiModel" type="text" autocomplete="off" spellcheck="false">
+        <p class="msg">🔒 Tu clave se guarda solo en este dispositivo y se manda directo a tu IA: no pasa por servidores de TexJAHC. El uso lo cobra tu proveedor de IA a tu cuenta.</p>
+      </div>
+      <div id="codeBox" class="hide">
+        <label for="key">Escribe tu código de acceso de TexJAHC. Se guarda en este teléfono/compu.</label>
+        <input id="key" type="password" placeholder="Tu código" autocomplete="off">
+        <p class="msg">La clave de Claude vive en el servidor, no aquí. El código solo evita que otros usen tu saldo.</p>
+      </div>
+      <div class="row">
+        <button class="btn sec" id="saveKey">Guardar</button>
+        <button class="btn sec" id="testKey">Probar conexión</button>
+      </div>
+      <button class="btn sec" id="forgetKey">🗑️ Borrar mi clave de este dispositivo</button>
+      <p class="msg" id="keyState" aria-live="polite"></p>
     </details>
   </div>
 
@@ -148,15 +175,90 @@ let mode = 'guion';
 
 function getKey(){ try { return localStorage.getItem('pv2_accessCode') || ''; } catch(e){ return ''; } }
 try { localStorage.removeItem('pv2_claudeKey'); } catch(e){}
-function refreshKey(){
-  const k = getKey();
-  $('key').value = k;
-  $('keySum').textContent = k ? '🔑 Código guardado ✓ (toca para cambiarlo)' : '🔑 Código de acceso — falta';
-  $('keyBox').open = !k;
+
+/* ===== Tu IA: cada quien usa su IA favorita con su propia clave ===== */
+const PROVS = {
+  claude: { name: 'Claude', model: 'claude-sonnet-5-5', lbl: 'Tu clave de Claude (empieza con sk-ant-)',
+            help: 'Consíguela en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> › API Keys.' },
+  openai: { name: 'ChatGPT', model: 'gpt-6.1-sol', lbl: 'Tu clave de OpenAI (empieza con sk-)',
+            help: 'Consíguela en <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a> › API keys. (La suscripción de ChatGPT Plus no incluye la API.)' },
+  gemini: { name: 'Gemini', model: 'gemini-3.8-flash', lbl: 'Tu clave de Gemini',
+            help: 'Consíguela gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a> › Get API key.' },
+  compat: { name: 'Tu IA', model: '', lbl: 'Tu clave de API',
+            help: 'Sirve para servicios compatibles con OpenAI. Escribe la dirección de su API y el nombre del modelo.' },
+  server: { name: 'TexJAHC', model: '' },
+};
+const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } };
+const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch(e){} };
+// Dentro de la app Android: la configuración se comparte con el cuadrito flotante
+if (APPB && typeof APPB.getAiConfig === 'function' && !lsGet('pv2_aiProv')){
+  try { const c = JSON.parse(APPB.getAiConfig() || '{}');
+    if (c.prov){ lsSet('pv2_aiProv', c.prov); lsSet('pv2_aiKey_' + c.prov, c.key || ''); lsSet('pv2_aiModel_' + c.prov, c.model || ''); lsSet('pv2_aiBase', c.base || ''); }
+  } catch(e){}
 }
+// Si ya usabas el código de acceso, sigues igual; si no, empiezas con Claude
+function getProv(){ const p = lsGet('pv2_aiProv'); return PROVS[p] ? p : (getKey() ? 'server' : 'claude'); }
+function aiCfg(){
+  const prov = getProv();
+  return { prov, key: lsGet('pv2_aiKey_' + prov), model: lsGet('pv2_aiModel_' + prov) || PROVS[prov].model,
+           base: lsGet('pv2_aiBase').replace(/\/+$/, ''), code: getKey() };
+}
+function aiReady(c){ c = c || aiCfg(); return c.prov === 'server' ? !!c.code : !!c.key && (c.prov !== 'compat' || (!!c.base && !!c.model)); }
+function shareWithApp(){
+  if (!APPB || typeof APPB.setAiConfig !== 'function') return;
+  const c = aiCfg();
+  try { APPB.setAiConfig(JSON.stringify({ prov: c.prov, key: c.key, model: lsGet('pv2_aiModel_' + c.prov), base: c.base, code: c.code })); } catch(e){}
+}
+function paintProv(){
+  const prov = $('prov').value, P = PROVS[prov];
+  $('codeBox').classList.toggle('hide', prov !== 'server');
+  $('ownKeyBox').classList.toggle('hide', prov === 'server');
+  $('forgetKey').classList.toggle('hide', prov === 'server');
+  $('baseBox').classList.toggle('hide', prov !== 'compat');
+  if (prov !== 'server'){
+    $('apiKeyLbl').textContent = P.lbl; $('keyHelp').innerHTML = P.help;
+    $('apiKey').value = lsGet('pv2_aiKey_' + prov);
+    $('aiModel').value = lsGet('pv2_aiModel_' + prov); $('aiModel').placeholder = P.model || 'nombre-del-modelo';
+    $('aiBase').value = lsGet('pv2_aiBase');
+  }
+}
+function refreshKey(){
+  const c = aiCfg();
+  $('prov').value = c.prov; paintProv();
+  $('key').value = c.code;
+  const ok = aiReady(c);
+  $('keySum').textContent = ok
+    ? '🔑 Contesta: ' + (c.prov === 'server' ? 'servidor de TexJAHC' : PROVS[c.prov].name + (c.model ? ' · ' + c.model : '')) + ' ✓ (toca para cambiar)'
+    : '🔑 Elige tu IA y pega tu clave — falta';
+  $('keyBox').open = !ok;
+}
+$('prov').onchange = () => { paintProv(); $('keyState').textContent = ''; };
 $('saveKey').onclick = () => {
-  try { localStorage.setItem('pv2_accessCode', $('key').value.trim()); } catch(e){}
-  refreshKey();
+  const prov = $('prov').value;
+  lsSet('pv2_aiProv', prov);
+  if (prov === 'server') lsSet('pv2_accessCode', $('key').value.trim());
+  else {
+    lsSet('pv2_aiKey_' + prov, $('apiKey').value.trim());
+    lsSet('pv2_aiModel_' + prov, $('aiModel').value.trim());
+    if (prov === 'compat') lsSet('pv2_aiBase', $('aiBase').value.trim());
+  }
+  shareWithApp(); refreshKey();
+  $('keyState').textContent = aiReady() ? 'Guardado ✓' : 'Guardado, pero falta la clave' + (prov === 'compat' ? ', la dirección o el modelo.' : '.');
+};
+$('forgetKey').onclick = () => {
+  const prov = $('prov').value;
+  if (!confirm('¿Borrar tu clave de ' + PROVS[prov].name + ' de este dispositivo?')) return;
+  lsSet('pv2_aiKey_' + prov, ''); $('apiKey').value = '';
+  shareWithApp(); refreshKey(); $('keyState').textContent = 'Clave borrada de este dispositivo.';
+};
+$('testKey').onclick = async () => {
+  $('saveKey').click();
+  if (!aiReady()){ return; }
+  $('testKey').disabled = true; $('keyState').textContent = 'Probando…';
+  try { const r = await callAI([{ role: 'user', content: 'Responde solo: listo' }], { maxTokens: 200 });
+        $('keyState').textContent = '✓ Conectado. Respondió: ' + r.text.slice(0, 60); }
+  catch(e){ $('keyState').textContent = '✗ ' + e.message; }
+  finally { $('testKey').disabled = false; }
 };
 refreshKey();
 
@@ -197,8 +299,91 @@ ${extra ? 'Extra: ' + extra : ''}
 ${RULES}`;
 }
 
-/** Manda la conversación al servidor. Regresa {text, sources} o lanza un Error entendible. */
+const AI_SYSTEM = `Eres el asistente de TexJAHC, una app de teleprompter para creadores de contenido en México.
+Responde en español de México, claro, útil y completo, en tono cercano.
+Usa texto plano: sin markdown, sin asteriscos ni almohadillas (puedes usar guiones para listas).
+Si usas información de internet, básate en las fuentes que encontraste.`;
+
+/** Errores claros, iguales para todas las IA. */
+function aiError(name, status, msg){
+  msg = msg || '';
+  if (status === 401 || status === 403 || /invalid.*(key|api)|api key not valid|incorrect api key|permission/i.test(msg)) return new Error('Tu clave de ' + name + ' no es válida. Revísala arriba en 🔑.');
+  if (/credit|balance|quota|billing|insufficient/i.test(msg)) return new Error('Tu cuenta de ' + name + ' no tiene saldo o llegó a su límite. Revísala con tu proveedor.');
+  if (status === 429) return new Error('Demasiadas preguntas seguidas a ' + name + '. Espera unos segundos.');
+  if (status === 404 || /model/i.test(msg) && /not found|does not exist|unknown/i.test(msg)) return new Error('Ese modelo no existe en ' + name + '. Deja «Modelo» vacío o escribe otro.');
+  return new Error(name + ' no pudo responder: ' + (msg || ('error ' + status)));
+}
+async function aiFetch(name, url, init){
+  let r;
+  try { r = await fetch(url, init); } catch(e){ throw new Error('No me pude conectar con ' + name + '. Revisa tu internet' + (name === 'Tu IA' ? ' y la dirección de la API.' : '.')); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw aiError(name, r.status, (j.error && (j.error.message || j.error)) || j.message || '');
+  return j;
+}
+/** Llama directo a la IA de la persona (Claude, ChatGPT, Gemini o compatible). */
+async function callOwnAI(c, messages, opts){
+  const search = !!(opts && opts.search), maxTokens = Math.min(Math.max((opts && opts.maxTokens) || 2000, 200), 4000);
+  const name = PROVS[c.prov].name;
+  if (c.prov === 'claude'){
+    const convo = messages.map(m => ({ role: m.role, content: m.content }));
+    let content = [];
+    for (let i = 0; i < 4; i++){
+      const j = await aiFetch(name, 'https://api.anthropic.com/v1/messages', { method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: c.model, max_tokens: maxTokens, system: AI_SYSTEM, messages: convo,
+          ...(search ? { tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 5 }] } : {}) }) });
+      content = content.concat(j.content || []);
+      if (j.stop_reason !== 'pause_turn') break;
+      convo.push({ role: 'assistant', content: j.content });
+    }
+    const sources = [];
+    content.forEach(b => (b.citations || []).forEach(x => { if (x.url && !sources.some(s => s.url === x.url)) sources.push({ url: x.url, title: x.title || x.url }); }));
+    return { text: content.filter(b => b.type === 'text').map(b => b.text).join('').trim(), sources };
+  }
+  if (c.prov === 'openai'){
+    const j = await aiFetch(name, 'https://api.openai.com/v1/responses', { method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + c.key },
+      body: JSON.stringify({ model: c.model, instructions: AI_SYSTEM, max_output_tokens: maxTokens,
+        input: messages.map(m => ({ role: m.role, content: m.content })),
+        ...(search ? { tools: [{ type: 'web_search' }] } : {}) }) });
+    let text = typeof j.output_text === 'string' ? j.output_text : '';
+    const sources = [];
+    (j.output || []).filter(o => o.type === 'message').forEach(o => (o.content || []).forEach(p => {
+      if (p.type === 'output_text'){ if (!j.output_text) text += p.text || '';
+        (p.annotations || []).forEach(a => { if (a.url && !sources.some(s => s.url === a.url)) sources.push({ url: a.url, title: a.title || a.url }); }); }
+    }));
+    return { text: text.trim(), sources };
+  }
+  if (c.prov === 'gemini'){
+    const j = await aiFetch(name, 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(c.model) + ':generateContent', { method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': c.key },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYSTEM }] },
+        contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        generationConfig: { maxOutputTokens: maxTokens }, ...(search ? { tools: [{ google_search: {} }] } : {}) }) });
+    const cand = (j.candidates || [])[0] || {};
+    const text = ((cand.content && cand.content.parts) || []).map(p => p.text || '').join('').trim();
+    const sources = [];
+    ((cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || []).forEach(g => { if (g.web && g.web.uri && !sources.some(s => s.url === g.web.uri)) sources.push({ url: g.web.uri, title: g.web.title || g.web.uri }); });
+    if (!text) throw new Error('Gemini no dio respuesta' + (cand.finishReason ? ' (' + cand.finishReason + ')' : '') + '. Intenta con otra pregunta.');
+    return { text, sources };
+  }
+  // compatible con OpenAI (Chat Completions)
+  const j = await aiFetch(name, c.base + '/chat/completions', { method: 'POST',
+    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + c.key },
+    body: JSON.stringify({ model: c.model, max_tokens: maxTokens, messages: [{ role: 'system', content: AI_SYSTEM }, ...messages] }) });
+  return { text: (((j.choices || [])[0] || {}).message || {}).content || '', sources: [] };
+}
+
+/** Manda la conversación a la IA elegida (o al servidor de TexJAHC). Regresa {text, sources} o lanza un Error entendible. */
 async function callAI(messages, opts){
+  const cfg = aiCfg();
+  if (cfg.prov !== 'server'){
+    if (!aiReady(cfg)){ $('keyBox').open = true; throw new Error('Primero elige tu IA y pega tu clave arriba en 🔑.'); }
+    const r = await callOwnAI(cfg, messages, opts);
+    if (!r.text) throw new Error(PROVS[cfg.prov].name + ' no devolvió respuesta. Intenta otra vez.');
+    if (opts && opts.search && cfg.prov === 'compat') r.text += '\n\n(Esta IA no busca en internet desde TexJAHC: respondió con lo que sabe.)';
+    return r;
+  }
   const code = getKey();
   if (!code){ $('keyBox').open = true; throw new Error('Primero escribe y guarda tu código de acceso arriba.'); }
   let r;
@@ -472,7 +657,13 @@ $('toPrompter').onclick = () => {
   sendToPrompter(studied.join('\n\n'));
 };
 // Abrir directo en una pestaña: asistente.html#investigar
-if (location.hash){ const t = document.querySelector('.tab[data-m="' + location.hash.slice(1) + '"]'); if (t) t.click(); }
+function openHash(){
+  const h = location.hash.slice(1);
+  if (h === 'clave'){ $('keyBox').open = true; $('keyCard').scrollIntoView({ block: 'start' }); return; }
+  const t = document.querySelector('.tab[data-m="' + h + '"]'); if (t) t.click();
+}
+if (location.hash) openHash();
+window.addEventListener('hashchange', openHash);
 </script>
 </body>
 </html>
