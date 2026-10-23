@@ -16,6 +16,11 @@ android {
         versionCode = run
         versionName = "1.0.$run"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // Variables de entorno (en GitHub: Settings › Secrets and variables › Actions › Variables).
+        // Si no existen, se usan las de siempre. Solo direcciones públicas: nunca claves aquí.
+        fun env(name: String, def: String) = (System.getenv(name) ?: "").trim().ifEmpty { def }
+        buildConfigField("String", "WEB_URL", "\"" + env("TEXJAHC_WEB_URL", "https://j2916artprepa2a-ux.github.io/prompter-voz/") + "\"")
+        buildConfigField("String", "CHAT_URL", "\"" + env("TEXJAHC_CHAT_URL", "https://veznsmmyylsqrodqzcul.supabase.co/functions/v1/chat") + "\"")
     }
 
     // Llave fija para que cada versión nueva se instale encima de la anterior

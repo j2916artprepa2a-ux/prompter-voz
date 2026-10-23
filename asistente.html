@@ -166,11 +166,13 @@ details summary{cursor:pointer;color:var(--dim);font-size:14px}
   </div>
 </main>
 
+<script src="config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+const CFG = window.TEXJAHC_CONFIG || {};   // configuración pública (config.js)
 const APPB = window.TexJAHCAndroid || null;
 // Servidor de TexJAHC (Supabase): ahí vive la clave de Claude, nunca en esta página.
-const API = 'https://veznsmmyylsqrodqzcul.supabase.co/functions/v1/chat';
+const API = CFG.CHAT_URL || 'https://veznsmmyylsqrodqzcul.supabase.co/functions/v1/chat';
 let mode = 'guion';
 
 function getKey(){ try { return localStorage.getItem('pv2_accessCode') || ''; } catch(e){ return ''; } }
@@ -178,11 +180,11 @@ try { localStorage.removeItem('pv2_claudeKey'); } catch(e){}
 
 /* ===== Tu IA: cada quien usa su IA favorita con su propia clave ===== */
 const PROVS = {
-  claude: { name: 'Claude', model: 'claude-sonnet-5-5', lbl: 'Tu clave de Claude (empieza con sk-ant-)',
+  claude: { name: 'Claude', model: (CFG.MODELS && CFG.MODELS.claude) || 'claude-sonnet-5-5', lbl: 'Tu clave de Claude (empieza con sk-ant-)',
             help: 'Consíguela en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> › API Keys.' },
-  openai: { name: 'ChatGPT', model: 'gpt-6.1-sol', lbl: 'Tu clave de OpenAI (empieza con sk-)',
+  openai: { name: 'ChatGPT', model: (CFG.MODELS && CFG.MODELS.openai) || 'gpt-6.1-sol', lbl: 'Tu clave de OpenAI (empieza con sk-)',
             help: 'Consíguela en <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a> › API keys. (La suscripción de ChatGPT Plus no incluye la API.)' },
-  gemini: { name: 'Gemini', model: 'gemini-3.8-flash', lbl: 'Tu clave de Gemini',
+  gemini: { name: 'Gemini', model: (CFG.MODELS && CFG.MODELS.gemini) || 'gemini-3.8-flash', lbl: 'Tu clave de Gemini',
             help: 'Consíguela gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a> › Get API key.' },
   compat: { name: 'Tu IA', model: '', lbl: 'Tu clave de API',
             help: 'Sirve para servicios compatibles con OpenAI. Escribe la dirección de su API y el nombre del modelo.' },

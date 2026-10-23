@@ -187,7 +187,7 @@ class MainActivity : Activity() {
                 "si pasa, sigue con esta versión normal. No apagues Play Protect."
             a11yBtn.text = "Descargar versión Live (experimental)"
             a11yBtn.setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://j2916artprepa2a-ux.github.io/prompter-voz/descargas/TexJAHC-live.apk")))
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WEB_URL + "descargas/TexJAHC-live.apk")))
             }
         }
         col.addView(label(
