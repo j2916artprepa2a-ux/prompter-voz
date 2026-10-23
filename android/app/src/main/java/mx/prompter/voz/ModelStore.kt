@@ -14,7 +14,7 @@ import java.util.zip.GZIPInputStream
  * y se queda en el cel. Después funciona sin internet y sin el reconocedor de Google.
  */
 object ModelStore {
-    const val URL_MODEL = "https://j2916artprepa2a-ux.github.io/prompter-voz/models/es.tar.gz"
+    val URL_MODEL: String = BuildConfig.WEB_URL + "models/es.tar.gz"   // sale de TEXJAHC_WEB_URL al compilar
 
     fun dir(c: Context) = File(c.filesDir, "vosk-es")
     fun ready(c: Context) = File(dir(c), ".ok").exists()

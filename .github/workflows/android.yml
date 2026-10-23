@@ -23,6 +23,10 @@ jobs:
           gradle-version: '8.9'
       - name: Compilar APK
         id: build
+        env:
+          # Variables del repositorio (Settings › Secrets and variables › Actions › Variables); vacías = valores de siempre
+          TEXJAHC_WEB_URL: ${{ vars.TEXJAHC_WEB_URL }}
+          TEXJAHC_CHAT_URL: ${{ vars.TEXJAHC_CHAT_URL }}
         run: |
           set -o pipefail
           gradle -p android assembleRelease --stacktrace --no-daemon 2>&1 | tee build.log

@@ -97,6 +97,10 @@ python -m http.server 8000
 # abre http://localhost:8000
 ```
 
+## Seguridad y configuración
+
+Variables de entorno, CORS del chat y RLS: ver [`docs/VARIABLES.md`](docs/VARIABLES.md). Firma de Android: [`docs/SEGURIDAD-FIRMA.md`](docs/SEGURIDAD-FIRMA.md).
+
 ## Créditos
 
 Inspirado en Textream para macOS.

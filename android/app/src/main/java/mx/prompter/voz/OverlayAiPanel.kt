@@ -32,7 +32,7 @@ class OverlayAiPanel(
     private val onClose: () -> Unit
 ) {
     companion object {
-        private const val ENDPOINT = "https://veznsmmyylsqrodqzcul.supabase.co/functions/v1/chat"
+        private val ENDPOINT = BuildConfig.CHAT_URL   // variable de entorno TEXJAHC_CHAT_URL al compilar
     }
 
     private val history = JSONArray()

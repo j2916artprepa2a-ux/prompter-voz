@@ -39,7 +39,7 @@ import java.io.OutputStream
 class RecordActivity : Activity() {
 
     companion object {
-        const val URL = "https://j2916artprepa2a-ux.github.io/prompter-voz/"
+        val URL: String = BuildConfig.WEB_URL   // variable de entorno TEXJAHC_WEB_URL al compilar
         const val EXTRA_PAGE = "page"
     }
 
