@@ -1,0 +1,2 @@
+# La página principal sin redirecciones (para que la app instalada y el service worker no fallen)
+/ /index.html 200

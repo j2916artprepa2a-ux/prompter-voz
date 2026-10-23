@@ -1,0 +1,15 @@
+# No se publican en Cloudflare (código de Android y del servidor, configuración, documentos)
+.git
+.github
+.gitignore
+.nojekyll
+.assetsignore
+wrangler.jsonc
+android
+servidor
+docs
+README.md
+node_modules
+# Más de 25 MB: Cloudflare no los acepta. La app los baja de GitHub Pages.
+models
+lib/ffmpeg/ffmpeg-core.wasm

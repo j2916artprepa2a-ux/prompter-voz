@@ -1,0 +1,13 @@
+// Cloudflare (Workers › prompter-voz conectado a GitHub): publica la app web tal cual.
+// Cada vez que algo entra a main, Cloudflare la vuelve a publicar sola.
+// Lo que NO se publica está en .assetsignore (Android, servidor y archivos de más de 25 MB,
+// que la app baja de GitHub Pages).
+{
+  "name": "prompter-voz",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": ".",
+    "not_found_handling": "404-page",
+    "html_handling": "none"
+  }
+}

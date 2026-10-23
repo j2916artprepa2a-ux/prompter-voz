@@ -529,6 +529,10 @@ Escribe aquí tu cierre.`;
 // Guion vacío al abrir por primera vez (los guiones que ya tengas guardados se respetan)
 const DEFAULT_SCRIPT = '';
 
+// Archivos de más de 25 MB (voz integrada y unión de video): Cloudflare no los acepta.
+// En GitHub Pages (o en tu compu) se usan los de aquí; en cualquier otro sitio se bajan de GitHub Pages.
+const BIG = /(^|\.)github\.io$|^localhost$|^127\.0\.0\.1$/.test(location.hostname) ? '' : 'https://j2916artprepa2a-ux.github.io/prompter-voz/';
+
 const store = {
   get(k, d){ try{ const v = localStorage.getItem('pv2_'+k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('pv2_'+k, JSON.stringify(v)); }catch(e){} }
@@ -855,7 +859,7 @@ async function loadVosk(){
         if (!ok) throw new Error('sin-datos');
       }
       let last;
-      for (const u of ['models/es.tar.gz', 'models/es-0.3.tar.gz']){
+      for (const u of [BIG + 'models/es.tar.gz', BIG + 'models/es-0.3.tar.gz']){
         const url = new URL(u, location.href).href;
         if (!cached){
           try {
@@ -1248,11 +1252,11 @@ function loadMerger(){
   if (!ffmpegLoading){
     ffmpegLoading = (async () => {
       if (!window.FFmpegWASM) await loadScript('lib/ffmpeg/ffmpeg.js');
-      if (!ffCached()){ try { await fetchProgress(new URL('lib/ffmpeg/ffmpeg-core.wasm', location.href).href, 'Preparando para unir clips', t => { $('mergeTxt').textContent = t; }); } catch(e){} }
+      if (!ffCached()){ try { await fetchProgress(new URL(BIG + 'lib/ffmpeg/ffmpeg-core.wasm', location.href).href, 'Preparando para unir clips', t => { $('mergeTxt').textContent = t; }); } catch(e){} }
       const ff = new FFmpegWASM.FFmpeg();
       await ff.load({
         coreURL: new URL('lib/ffmpeg/ffmpeg-core.js', location.href).href,
-        wasmURL: new URL('lib/ffmpeg/ffmpeg-core.wasm', location.href).href,
+        wasmURL: new URL(BIG + 'lib/ffmpeg/ffmpeg-core.wasm', location.href).href,
       });
       try { localStorage.setItem('pv2_ffOk', '1'); } catch(e){}
       ffmpegInst = ff; return ff;
