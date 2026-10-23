@@ -77,6 +77,8 @@ class OverlayService : Service(), RecognitionListener {
     private var fontSp = 22f
     private var voice = true
     private var playing = false
+    // Pausado con la voz («TexJAHC pausa»): el micrófono sigue oyendo SOLO para «TexJAHC sigue»
+    private var voicePaused = false
     private var wpm = 140
     private var recognizer: SpeechRecognizer? = null
     private var errors = 0
@@ -92,7 +94,7 @@ class OverlayService : Service(), RecognitionListener {
                 if (!playing || !voice || configs == null) return
                 if (configs.any { it.isClientSilenced }) {
                     status.text = if (a11yWindow) "Android silenció el micrófono aquí · usa ⏱"
-                                  else "Otra app usa el micrófono · activa Accesibilidad o usa ⏱"
+                                  else "La cámara ocupa el micrófono · usa ⏱ o graba en TexJAHC"
                 } else if (configs.isNotEmpty() && voskService != null) {
                     status.text = if (a11yWindow) "Escuchando… (accesibilidad)" else "Escuchando… (voz integrada)"
                 }
@@ -417,8 +419,8 @@ class OverlayService : Service(), RecognitionListener {
         if (cmd == lastCommand && now - lastCommandAt < 1800L) return true
         lastCommand = cmd; lastCommandAt = now
         when (cmd) {
-            "pausa" -> setPlaying(false)
-            "sigue" -> if (!playing) setPlaying(true)
+            "pausa" -> pauseByVoice()
+            "sigue" -> if (voicePaused) resumeByVoice() else if (!playing) setPlaying(true)
             "atras" -> { follower.pos = (follower.pos - 8).coerceAtLeast(0); render(true) }
             "mas grande" -> setFont(fontSp + 2f)
         }
@@ -513,9 +515,25 @@ class OverlayService : Service(), RecognitionListener {
         if (was) setPlaying(true)
     }
 
-    private fun togglePlay() = setPlaying(!playing)
+    private fun togglePlay() { if (voicePaused) resumeByVoice() else setPlaying(!playing) }
+
+    /** «TexJAHC pausa»: el texto se detiene, pero el micrófono sigue oyendo para que «TexJAHC sigue» funcione. */
+    private fun pauseByVoice() {
+        if (!playing || !voice) { setPlaying(false); return }
+        voicePaused = true
+        playBtn.text = "▶"
+        status.text = "En pausa · di «TexJAHC sigue» o toca ▶"
+    }
+
+    private fun resumeByVoice() {
+        voicePaused = false
+        if (!playing) { setPlaying(true); return }
+        playBtn.text = "⏸"
+        status.text = "Escuchando…"
+    }
 
     private fun setPlaying(on: Boolean) {
+        voicePaused = false
         playing = on
         playBtn.text = if (on) "⏸" else "▶"
         h.removeCallbacks(tick)
@@ -688,6 +706,7 @@ class OverlayService : Service(), RecognitionListener {
         errors = 0
         status.text = "🎙 " + t.trim().split(Regex("\\s+")).takeLast(2).joinToString(" ")
         if (processVoiceCommand(t)) return
+        if (voicePaused) { status.text = "En pausa · di «TexJAHC sigue» o toca ▶"; return }   // en pausa no avanza
         if (follower.follow(t)) render(false)
     }
 
@@ -714,8 +733,9 @@ class OverlayService : Service(), RecognitionListener {
             SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER -> {
                 // reconocedor trabado: lo recreamos
                 try { recognizer?.destroy() } catch (_: Exception) {}
-        stopVosk()
-        try { voskModel?.close() } catch (_: Exception) {}
+                stopVosk()
+                try { voskModel?.close() } catch (_: Exception) {}
+                voskModel = null   // se vuelve a cargar limpio la próxima vez (antes quedaba cerrado y ya no escuchaba)
                 recognizer = null
                 status.text = "Reiniciando voz…"
             }

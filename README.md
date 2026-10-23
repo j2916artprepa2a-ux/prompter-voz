@@ -31,6 +31,7 @@ Escribe tu guion, toca el micrófono y habla. El texto se queda pegado arriba, d
 - 🔁 **Te alcanza si te saltas algo**: si brincas una frase, se ubica solo. Si repites palabras o hay ruido, no se mueve de más.
 - 📷 **Texto debajo de la cámara**: panel tipo *notch* arriba de la pantalla, pegado al lente frontal.
 - ⏺️ **Graba video con audio** desde la app y lo guarda solo al terminar.
+- 🔄 **Cambia de cámara mientras grabas**: frontal ⇄ trasera cuantas veces quieras, sin dejar de grabar; la voz te sigue y al final sale un solo video.
 - ⏸️ **Clips como TikTok**: pausa y sigue; si no te gustó el último clip, bórralo (⌫) y el texto regresa a donde empezaba. Al final los clips se unen en un solo video dentro del cel ([ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm)).
 - 🎬 **Ayudante de tomas**: escribe `[PAUSA]` y `[indicaciones]` en tu guion; se pausa solo al terminar cada toma y te dice qué sigue.
 - 🪟 **Ventana flotante en Windows**: el texto queda **siempre encima** de cualquier app (Zoom, OBS, Cámara de Windows, Meet…). Arrástrala debajo de tu webcam.
