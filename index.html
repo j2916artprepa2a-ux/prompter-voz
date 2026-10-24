@@ -186,6 +186,18 @@ textarea{width:100%;min-height:46vh;background:#0c0c0e;color:var(--ink);border:1
 /* ventana flotante (Picture-in-Picture) */
 body.pip #prompter{position:static;transform:none;width:100%;border-radius:0;box-shadow:none;height:100vh;padding:10px 18px 7px}
 body.pip{background:#000}
+/* Ventana flotante (computadora): el texto llena la ventana, botones grandes y letra nítida */
+body.pip #prompter{display:flex;flex-direction:column;padding:12px 18px 8px}
+body.pip #viewport{flex:1 1 auto;height:auto!important;min-height:calc(var(--fs) * var(--line))}
+body.pip #text{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body.pip #pfoot{height:30px!important;margin-top:6px!important;gap:10px!important;flex:0 0 auto}
+body.pip .mini{width:30px!important;height:30px!important}
+body.pip .mini svg{width:17px!important;height:17px!important}
+body.pip #status{font-size:12px!important;max-width:40%!important}
+body.pip #styleBtn{font-size:13px!important}
+body.pip #aiBtn{font-size:13px!important;width:auto!important}
+.pipOnly{display:none}
+body.pip .pipOnly{display:grid;font:700 13px/1 system-ui,sans-serif;color:rgba(255,255,255,.7)}
 /* menú de estilo */
 .swatches,.fonts{display:flex;flex-wrap:wrap;gap:10px}
 .sw{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0}
@@ -311,6 +323,8 @@ body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,60
     <button class="mini" id="farBtn" aria-label="Letra grande"><svg viewBox="0 0 24 24"><path d="M3 19L9 5l6 14M5.5 14h7"/><path d="M17 9v8M14.5 11.5L17 9l2.5 2.5"/></svg></button>
     <button class="mini" id="aiBtn" title="Abrir chat con IA" aria-label="Abrir chat con IA">🤖 IA</button>
     <button class="mini" id="miniMic" aria-label="Seguir mi voz"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
+    <button class="mini pipOnly" id="pipSmaller" aria-label="Letra más chica" title="Letra más chica">A−</button>
+    <button class="mini pipOnly" id="pipBigger" aria-label="Letra más grande" title="Letra más grande">A+</button>
     <button class="mini" id="miniX" aria-label="Minimizar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <button id="resizeGrip" aria-label="Cambiar tamaño del cuadro" title="Arrastra para cambiar el tamaño · doble toque para regresarlo"><svg viewBox="0 0 24 24"><path d="M20 10L10 20M20 16l-4 4"/></svg></button>
@@ -353,7 +367,7 @@ body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,60
 <div class="sheet" id="editSheet">
   <div class="card">
     <h2>Tu guion</h2>
-    <p class="hint">Escribe <b>[PAUSA]</b> donde quieras que el video se pause solo (como TikTok). Lo que pongas entre corchetes, como <b>[sonríe]</b> o <b>[muestra el producto]</b>, son indicaciones: se ven en amarillo y no tienes que decirlas.</p>
+    <p class="hint">Escribe <b>[PAUSA]</b> para marcar dónde termina cada toma. Tú decides cuándo pausar (si quieres que se pause solo, actívalo en Ajustes). Lo que pongas entre corchetes, como <b>[sonríe]</b> o <b>[muestra el producto]</b>, son indicaciones: se ven en amarillo y no tienes que decirlas.</p>
     <textarea id="scriptInput" spellcheck="true" placeholder="Pega o escribe aquí lo que vas a decir…"></textarea>
     <div class="actions">
       <button class="pill" id="exBtn">Plantilla con pausas</button>
@@ -451,6 +465,7 @@ body.custom-w:not(.tilted):not(.pip) #prompter:not(.min){width:min(var(--boxw,60
     <div class="row"><label for="camOn">Mostrar cámara</label><input type="checkbox" class="switch" id="camOn"></div>
     <div class="row"><label for="camFlip">Cámara en espejo</label><input type="checkbox" class="switch" id="camFlip"></div>
     <div class="row"><label for="textFlip">Texto en espejo (para cristal de teleprompter)</label><input type="checkbox" class="switch" id="textFlip"></div>
+    <div class="row"><label for="autoPause">Pausar solo al llegar a [PAUSA]<br><small style="color:var(--ink-dim)">Apagado: tú decides cuándo pausar</small></label><input type="checkbox" class="switch" id="autoPause"></div>
     <p class="hint">Tip: toca cualquier palabra del texto para saltar ahí. Desliza el texto arriba/abajo para moverte a mano. En Windows, “Ventana flotante” deja el texto siempre encima; arrástralo justo debajo de tu webcam.</p>
     <div class="row installRow hide"><label>Tenerla como app en tu pantalla</label><button class="pill installBtn" id="installBtn2">📲 Instalar</button></div>
     <p class="hint installHint hide" id="installHint"></p>
@@ -552,11 +567,13 @@ const S = {
   camOn: store.get('camOn', true),
   camFlip: store.get('camFlip', true),
   textFlip: store.get('textFlip', false),
+  autoPause: store.get('autoPause', false),   // false = al llegar a [PAUSA] NO se detiene; pausas tú
   color: store.get('color', 'white'),
   font: store.get('font', 'normal'),
 };
 
-const $ = id => document.getElementById(id);
+// Busca en la app y, si el cuadro está en la ventana flotante, también ahí
+const $ = id => document.getElementById(id) || (() => { try { return pipWin ? pipWin.document.getElementById(id) : null; } catch(_){ return null; } })();
 /* ---------- estilo del texto: color y tipo de letra (no toca el seguimiento de voz) ---------- */
 const COLORS = {
   white:  { name:'Blanco',   rgb:'255,255,255', hl:'#ffd34d' },
@@ -656,6 +673,13 @@ function takeDone(k){
   $('cueRedo').classList.toggle('hide', isLast || recOn);
   $('cue').dataset.k = k; $('cue').dataset.last = isLast ? 1 : 0;
   $('cue').classList.add('show');
+}
+/* Sin pausa automática: al llegar a una [PAUSA] solo se avisa; la grabación y la voz siguen.
+   Tú pausas con ● (o ⏸) cuando quieras. */
+function takeReached(k){
+  const n = takeEnds.length, isLast = k >= n - 1;
+  if (isLast) toast(recSession ? '¡Terminaste el guion! 🎉 Toca ✓ para guardar tu video.' : '¡Terminaste el guion! 🎉');
+  else toast('Toma ' + (k + 1) + ' de ' + n + ' ✓ · ' + (takeCues[k + 1] ? 'sigue: ' + takeCues[k + 1] : 'sigue cuando quieras') + (recSession ? ' · pausa con ● si quieres' : ''));
 }
 function hideCue(){ $('cue').classList.remove('show'); }
 function cueGo(){
@@ -762,7 +786,7 @@ function follow(transcript){
     if (pos < takeEnds[k] && np >= takeEnds[k]){ np = takeEnds[k]; doneK = k; break; }
   }
   if (np !== pos){ pos = np; manualOffset = 0; paint(); }
-  if (doneK >= 0) setTimeout(() => takeDone(doneK), 350);   // deja terminar la última palabra
+  if (doneK >= 0) setTimeout(() => S.autoPause ? takeDone(doneK) : takeReached(doneK), 350);   // deja terminar la última palabra
   return true;
 }
 window.__follow = t => { listening = true; follow(t); return pos; }; // para pruebas
@@ -1231,7 +1255,7 @@ async function finishRec(){
   releaseMicIfIdle();
   const type = (recMime || 'video/webm').split(';')[0];
   const blobs = clips.map(c => new Blob(c.chunks, { type }));
-  const sizes = clips.map(c => [c.vw, c.vh, c.tid]);
+  const sizes = clips.map(c => [c.vw, c.vh, c.tid, c.dur]);
   clips = [];
   if (!blobs.length){ toast('No hay nada grabado.'); return; }
   if (blobs.length === 1) return saveVideo(blobs[0], type);
@@ -1286,21 +1310,51 @@ async function mergeVideos(blobs, type, sizes){
     // se ajustan al tamaño del primero para que el video final salga bien (tarda más).
     const sz = (sizes || []).filter(z => z && z[0] && z[1]);
     const mixed = sz.length === blobs.length && sz.some(z => z[0] !== sz[0][0] || z[1] !== sz[0][1] || (z[2] && sz[0][2] && z[2] !== sz[0][2]));
-    let code;
-    if (!mixed){
-      code = await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'l.txt', '-c', 'copy', ...(ext === 'mp4' ? ['-movflags', '+faststart'] : []), out]);
-    } else {
-      $('mergeTxt').textContent = 'Uniendo cámara frontal y trasera… (puede tardar un poco)';
-      const W = sz[0][0] - sz[0][0] % 2, H = sz[0][1] - sz[0][1] % 2, n = blobs.length, args = [];
+    // Unir ajustando (recomprime): sirve si cambiaste de cámara o si la unión rápida salió mal
+    const reencode = async () => {
+      const n = blobs.length, args = [];
+      const W = sz.length ? sz[0][0] - sz[0][0] % 2 : 0, H = sz.length ? sz[0][1] - sz[0][1] % 2 : 0;
       for (let i = 0; i < n; i++) args.push('-i', 'c' + i + '.' + ext);
       let fc = '';
-      for (let i = 0; i < n; i++) fc += '[' + i + ':v]scale=' + W + ':' + H + ':force_original_aspect_ratio=decrease,pad=' + W + ':' + H + ':(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v' + i + '];';
+      for (let i = 0; i < n; i++) fc += '[' + i + ':v]' + (W && H
+        ? 'scale=' + W + ':' + H + ':force_original_aspect_ratio=decrease,pad=' + W + ':' + H + ':(ow-iw)/2:(oh-ih)/2,'
+        : 'scale=trunc(iw/2)*2:trunc(ih/2)*2,') + 'setsar=1,fps=30[v' + i + '];';
       for (let i = 0; i < n; i++) fc += '[v' + i + '][' + i + ':a]';
       fc += 'concat=n=' + n + ':v=1:a=1[v][a]';
       const enc = ext === 'mp4'
         ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart']
         : ['-c:v', 'libvpx', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '3M', '-c:a', 'libopus'];
-      code = await ff.exec([...args, '-filter_complex', fc, '-map', '[v]', '-map', '[a]', ...enc, out]);
+      try { await ff.deleteFile(out); } catch(e){}
+      return ff.exec([...args, '-filter_complex', fc, '-map', '[v]', '-map', '[a]', ...enc, out]);
+    };
+    // Cuánto dura el video unido (lo lee ffmpeg del archivo)
+    const probeDur = async () => {
+      let d = NaN;
+      const onLog = ({ message }) => { const m = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(message || ''); if (m) d = (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]); };
+      ff.on('log', onLog);
+      try { await ff.exec(['-i', out]); } catch(e){}
+      try { ff.off('log', onLog); } catch(e){}
+      return d;
+    };
+    let code;
+    if (!mixed){
+      code = await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'l.txt', '-c', 'copy', ...(ext === 'mp4' ? ['-movflags', '+faststart'] : []), out]);
+      // Revisión: si el video unido no dura lo que grabaste (le faltan pausas o salió dañado), se une otra vez ajustando
+      const want = (sizes || []).reduce((a, z) => a + ((z && z[3]) || 0), 0) / 1000;
+      if (code === 0 && want > 0){
+        const got = await probeDur();
+        if (!(got > want * 0.8 && got < want * 1.3)){
+          console.warn('Unión rápida con duración rara', got, 'esperado', want, '→ uniendo con ajuste');
+          $('mergeTxt').textContent = 'Revisando que no falte ninguna parte… (puede tardar un poco)';
+          code = await reencode();
+        }
+      } else if (code !== 0){
+        $('mergeTxt').textContent = 'Uniendo tus clips con ajuste… (puede tardar un poco)';
+        code = await reencode();
+      }
+    } else {
+      $('mergeTxt').textContent = 'Uniendo cámara frontal y trasera… (puede tardar un poco)';
+      code = await reencode();
     }
     if (code !== 0) throw new Error('ffmpeg ' + code);
     const data = await ff.readFile(out);
@@ -1380,6 +1434,15 @@ async function togglePip(){
   pipWin.document.documentElement.style.cssText = document.documentElement.style.cssText;
   pipWin.document.body.appendChild(prompter);
   $('pipBtn').classList.add('on');
+  // Lo que se escuchaba en la ventana principal ahora también funciona en la flotante
+  const fwd = type => pipWin.addEventListener(type, e => window.dispatchEvent(new PointerEvent(type, { clientX: e.clientX, clientY: e.clientY, pointerId: e.pointerId, pointerType: e.pointerType, buttons: e.buttons })));
+  fwd('pointermove'); fwd('pointerup');
+  pipWin.addEventListener('keydown', e => {
+    if (e.code === 'Space' || e.key.startsWith('Arrow')) e.preventDefault();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, code: e.code }));
+  });
+  let pipPaint = 0;
+  pipWin.addEventListener('resize', () => { cancelAnimationFrame(pipPaint); pipPaint = requestAnimationFrame(() => paint(true)); });
   pipWin.addEventListener('pagehide', () => {
     document.body.insertBefore(prompter, $('recTime'));
     pipWin = null; $('pipBtn').classList.remove('on');
@@ -1438,6 +1501,10 @@ $('doneBtn').onclick = finishRec;
 $('undoBtn').onclick = undoClip;
 $('flipBtn').onclick = flipCam;
 $('pipBtn').onclick = () => togglePip().catch(() => {});
+// Letra más chica / más grande desde la ventana flotante (se guarda igual que en Ajustes)
+const pipFont = d => { S.fs = Math.min(72, Math.max(13, S.fs + d)); store.set('fs', S.fs); try { fsI.value = Math.min(48, S.fs); } catch(_){} applyLook(); };
+$('pipSmaller').onclick = e => { e.stopPropagation(); pipFont(-2); };
+$('pipBigger').onclick = e => { e.stopPropagation(); pipFont(+2); };
 if (!('documentPictureInPicture' in window)) $('pipBtn').classList.add('hide');
 
 function open(id){ $(id).classList.add('open'); }
@@ -1573,6 +1640,8 @@ function placeFree(){
   const mb = $('moveBtn'); let drag = null, lastTap = 0;
   mb.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
+    // En la ventana flotante el cuadro ocupa toda la ventana: se mueve arrastrando la ventana misma
+    if (pipWin && prompter.ownerDocument !== document){ setStatus('Mueve la ventana arrastrándola desde su barra de arriba'); return; }
     const now = Date.now();
     if (now - lastTap < 350){        // doble toque: regresa junto a la cámara
       lastTap = 0; S.place = 'camera'; store.set('place', 'camera'); $('place').value = 'camera';
@@ -1672,6 +1741,9 @@ if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator
 $('camOn').onchange = e => { S.camOn = e.target.checked; store.set('camOn', S.camOn); S.camOn ? startCam() : stopCam(); };
 $('camFlip').onchange = e => { S.camFlip = e.target.checked; store.set('camFlip', S.camFlip); applyLook(); };
 $('textFlip').onchange = e => { S.textFlip = e.target.checked; store.set('textFlip', S.textFlip); applyLook(); };
+$('autoPause').checked = S.autoPause;
+$('autoPause').onchange = e => { S.autoPause = e.target.checked; store.set('autoPause', S.autoPause);
+  toast(S.autoPause ? 'Se pausará solo al llegar a cada [PAUSA]' : 'Ya no se pausa solo: pausa tú cuando quieras'); };
 
 // teclado (Windows): espacio = micrófono, flechas = mover, R = reiniciar
 window.addEventListener('keydown', e => {
