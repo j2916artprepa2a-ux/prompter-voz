@@ -1482,6 +1482,31 @@ window.addEventListener('pointerup', () => {
   }
 });
 
+// Rueda del mouse o dos dedos en el touchpad: mueve el texto línea por línea
+// (funciona en el cuadro normal y en la ventana flotante)
+let wheelAcc = 0;
+function moveLines(n){
+  if (!W.length) return;
+  const topOf = k => spans[W[Math.min(k, W.length - 1)]].offsetTop;
+  let k = Math.min(pos, W.length - 1);
+  for (let i = 0; i < Math.abs(n); i++){
+    const t = topOf(k);
+    if (n > 0){ while (k < W.length - 1 && topOf(k) <= t + 2) k++; }
+    else {
+      while (k > 0 && topOf(k - 1) >= t - 2) k--;          // inicio de esta línea
+      if (k > 0){ k--; const t2 = topOf(k); while (k > 0 && topOf(k - 1) >= t2 - 2) k--; }   // inicio de la anterior
+    }
+  }
+  pos = k; manualOffset = 0; paint();
+}
+viewport.addEventListener('wheel', e => {
+  e.preventDefault();
+  const lh = fsEff() * 1.32;
+  wheelAcc += e.deltaMode === 1 ? e.deltaY * lh : e.deltaMode === 2 ? e.deltaY * lh * 4 : e.deltaY;
+  const steps = Math.trunc(wheelAcc / lh);
+  if (steps){ wheelAcc -= steps * lh; moveLines(steps); }
+}, { passive: false });
+
 // IA: abre el chat web existente del proyecto, sin exponer claves ni alterar el servicio Android.
 const aiUrl = new URL('asistente.html', location.href).href;
 function showAi(){
